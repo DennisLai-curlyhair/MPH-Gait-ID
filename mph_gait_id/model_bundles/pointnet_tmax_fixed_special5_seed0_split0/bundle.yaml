@@ -1,0 +1,35 @@
+schema_version: 1
+bundle_id: pointnet_tmax_fixed_special5_seed0_split0
+display_name: PointNet-TMax Fixed-Special5 seed0 split0
+method_key: pc_v1
+description: Lightweight axis-aligned PointNet-TMax baseline for 15-frame retrieval.
+architecture: pc_v1
+input:
+  type: pointcloud
+  mode: raw_pointcloud
+  channels: 3
+data:
+  num_points: 1024
+  clip_len: 15
+  drop_first_frames: 30
+  batch_size: 16
+  coordinate_adapter: kinect_xyz_mm_to_forward_lateral_height_m_v1
+model:
+  name: temporal_pointnet_v1
+  num_classes: 29
+  in_channels: 3
+  point_channels: [64, 128, 256, 512]
+  embedding_dim: 256
+  temporal_pool: max
+  dropout: 0.0
+  point_normalization: center
+training:
+  fold: 0
+  seed: 0
+  epoch: 36
+  protocol: fixed_special5_subject_holdout_5split_v1
+  source: MPH_Gait/pointnet-tmax
+  amp: false
+checkpoint:
+  file: checkpoint.pt
+  sha256: 2c59f710ef48a3f793fd4bc2476a3ca1263cd8d961ff858ad5a143bfead2ca31

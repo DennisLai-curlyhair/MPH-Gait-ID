@@ -1,0 +1,69 @@
+schema_version: 4
+
+application:
+  name: MPH-Gait ID
+  stage: public_release
+
+storage:
+  database: ../data/gallery.sqlite3
+  output_root: ../outputs
+  model_bundles: model_bundles
+  live_enrollment_sessions: ../data/live_enrollment_sessions
+
+runtime:
+  bundle: mph_gait_fixed_special5_seed0_split0
+  device: auto
+  batch_size: 16
+  num_workers: 0
+
+realtime:
+  default_yolo_model: model_weights/yolov8n.pt
+  default_yolo_seg_model: model_weights/yolov8n-seg.pt
+  default_person_segmentation: yolo_seg
+  default_sam_checkpoint: model_weights/sam_vit_b_01ec64.pth
+  default_sam_model_type: vit_b
+  sam_refresh_interval: 10
+  processing_version_id: person_foreground_pointcloud_v1
+  processing_version_name_zh: 人體前景點雲 v1
+  processing_version_name_en: Person foreground point cloud v1
+  allow_multiple_people_enrollment: true
+  reject_multiple_people_recognition: false
+  multi_person_policy: primary_salience
+  max_valid_frame_gap_seconds: 1.0
+
+benchmark:
+  default_detector: yolo_seg
+  warmup_seconds: 10
+  duration_seconds: 60
+  inference_stride: 5
+  posture: stationary
+  save_numeric_report_automatically: true
+
+folder_input:
+  stride: 5
+
+registration:
+  min_clips: 5
+  max_embeddings: 10
+  realtime_duration_seconds: 120
+  realtime_warmup_seconds: 3
+
+recognition:
+  top_k_per_identity: 3
+  unknown_threshold: null
+  min_margin: 0.03
+  calibration_status: provisional
+  provisional_threshold: 0.55
+  provisional_thresholds:
+    pointcloud_tuned: {"15": 0.55, "30": 0.55}
+    pc_v1: {"15": 0.55, "30": 0.55}
+    mph_gait: {"15": 0.55, "30": 0.55}
+    lidargaitpp: {"15": 0.55, "30": 0.55}
+
+ui:
+  geometry: 1480x900
+  language: auto
+  folder_fps: 10.0
+  playback_fps: 10.0
+  show_rgb_pointcloud_overlay: true
+  realtime_cloud_zoom: 1.0

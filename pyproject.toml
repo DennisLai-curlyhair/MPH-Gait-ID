@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mph-gait-id"
+version = "0.1.0"
+description = "Gallery-based point-cloud gait enrollment and identification with Azure Kinect DK"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "numpy>=1.24,<2.0",
+  "opencv-python>=4.8,<4.11",
+  "Pillow>=10.0,<11.0",
+  "PyYAML>=6.0,<7.0",
+  "torch>=2.0,<2.6",
+  "packaging>=23.0,<25.0",
+]
+
+[project.optional-dependencies]
+realtime = [
+  "pyk4a==1.5.0",
+  "ultralytics==8.0.173",
+]
+sam = [
+  "segment-anything @ https://github.com/facebookresearch/segment-anything/archive/6fdee8f2727f4506cfbbe553e23b895e27956588.zip",
+]
+dev = [
+  "pytest>=7.4,<9.0",
+]
+
+[project.scripts]
+mph-gait-id = "mph_gait_id.ui_app:main"
+mph-gait-id-cli = "mph_gait_id.app:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mph_gait_id*"]
+
+[tool.setuptools.package-data]
+mph_gait_id = [
+  "configs/*.yaml",
+  "assets/*.yaml",
+  "model_bundles/*/*.yaml",
+  "model_bundles/*/*.pt",
+  "model_weights/*.pt",
+]

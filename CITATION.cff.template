@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this application or its model implementation, please cite the accompanying MPH-Gait paper."
+title: "MPH-Gait ID: Gallery-Based Point-Cloud Gait Enrollment and Identification"
+type: software
+authors:
+  - family-names: "TBD"
+    given-names: "TBD"
+version: "0.1.0"
+date-released: "TBD"
+repository-code: "TBD"
+preferred-citation:
+  type: conference-paper
+  title: "MPH-Gait: Lightweight Multi-Scale Point-Hierarchy Gait Identification from Raw Point Clouds"
+  authors:
+    - family-names: "TBD"
+      given-names: "TBD"
+  year: "TBD"

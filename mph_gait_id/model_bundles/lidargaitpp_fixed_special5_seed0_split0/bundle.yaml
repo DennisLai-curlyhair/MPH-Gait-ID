@@ -1,0 +1,47 @@
+schema_version: 1
+bundle_id: lidargaitpp_fixed_special5_seed0_split0
+display_name: LidarGait++ Fixed-Special5 seed0 split0
+method_key: lidargaitpp
+description: Pinned OpenGait LidarGait++ official architecture and preprocessing, selected at iteration 2000.
+architecture: lidargaitpp_official
+input:
+  type: pointcloud
+  mode: raw_pointcloud
+  channels: 4
+data:
+  num_points: 1024
+  clip_len: 15
+  drop_first_frames: 30
+  batch_size: 1
+  coordinate_adapter: kinect_xyz_mm_to_forward_lateral_height_m_v1
+model:
+  name: LidarGaitPlusPlus
+  channel: 16
+  pool: PPP_HAP
+  sampling: knn
+  npoints: [512, 256, 128]
+  nsample: 32
+  scale_aware: true
+  normalize_dp: true
+  scale: [1, 2, 4, 8, 16]
+  embedding_dim: 256
+  parts_num: 31
+  SeparateFCs:
+    in_channels: 256
+    out_channels: 256
+    parts_num: 31
+  SeparateBNNecks:
+    class_num: 14
+    in_channels: 256
+    parts_num: 31
+training:
+  fold: 0
+  seed: 0
+  iteration: 2000
+  protocol: fixed_special5_subject_holdout_5split_v1
+  upstream_repository: https://github.com/ShiqiYu/OpenGait.git
+  upstream_commit: f754f6f3831e9f83bb28f4e2f63dd43d8bcf9dc4
+  amp: false
+checkpoint:
+  file: checkpoint.pt
+  sha256: 2a1a44d2f900870654d7b93b11a72ad633b1392f5d185f5efde3c26529419a2b

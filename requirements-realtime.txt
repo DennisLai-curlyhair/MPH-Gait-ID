@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Azure Kinect Sensor SDK must also be installed at OS level.
+pyk4a==1.5.0
+ultralytics==8.0.173

@@ -1,0 +1,50 @@
+schema_version: 1
+bundle_id: mph_gait_fixed_special5_seed0_split0
+display_name: MPH-Gait Fixed-Special5 seed0 split0
+method_key: mph_gait
+description: MPH-Gait model with bounded multi-scale point hierarchy and regular-window token transformer.
+architecture: mph_gait
+input:
+  type: pointcloud
+  mode: raw_pointcloud
+  channels: 3
+data:
+  num_points: 1024
+  clip_len: 15
+  drop_first_frames: 30
+  batch_size: 16
+  coordinate_adapter: kinect_xyz_mm_to_forward_lateral_height_m_v1
+model:
+  name: pc_v1_hierarchical_multiscale_regular_transformer_v1
+  num_classes: 29
+  in_channels: 3
+  point_channels: [64, 128, 256, 512]
+  embedding_dim: 256
+  temporal_pool: max
+  dropout: 0.0
+  point_normalization: center
+  token_dim: 64
+  fine_grid: [2, 2, 4]
+  coarse_grid: [1, 2, 2]
+  shift_axes: [false, true, true]
+  transformer_depth: 1
+  transformer_heads: 4
+  transformer_mlp_ratio: 2.0
+  attention_dropout: 0.0
+  min_points_per_window: 2
+  token_dropout: 0.0
+  residual_max_weight: 0.2
+  residual_weight_init: 0.05
+  use_coarse_windows: true
+  use_shifted_windows: false
+  use_token_transformer: true
+training:
+  fold: 0
+  seed: 0
+  epoch: 30
+  protocol: fixed_special5_subject_holdout_5split_v1
+  source: MPH_Gait/mph-gait
+  amp: false
+checkpoint:
+  file: checkpoint.pt
+  sha256: 10b62e11786828e51f2287bd47cfbdf8c83ebf1e565d1426ec217ddff2f8222d

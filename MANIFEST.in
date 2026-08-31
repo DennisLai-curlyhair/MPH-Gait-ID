@@ -1,0 +1,6 @@
+recursive-include mph_gait_id/configs *.yaml
+recursive-include mph_gait_id/assets *.yaml
+recursive-include mph_gait_id/model_bundles *.yaml *.pt
+recursive-include mph_gait_id/model_weights yolov8n.pt yolov8n-seg.pt
+include README.md
+include THIRD_PARTY_NOTICES.md

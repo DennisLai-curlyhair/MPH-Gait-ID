@@ -1,0 +1,2 @@
+-r requirements-realtime.txt
+segment-anything @ https://github.com/facebookresearch/segment-anything/archive/6fdee8f2727f4506cfbbe553e23b895e27956588.zip

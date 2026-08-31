@@ -1,0 +1,54 @@
+schema_version: 1
+
+profiles:
+  offline-demo:
+    - pointnet_tmax_checkpoint
+    - mph_gait_checkpoint
+    - lidargaitpp_checkpoint
+  realtime-yolo:
+    - pointnet_tmax_checkpoint
+    - mph_gait_checkpoint
+    - lidargaitpp_checkpoint
+    - yolov8n
+    - yolov8n_seg
+  sam:
+    - sam_vit_b
+  all:
+    - pointnet_tmax_checkpoint
+    - mph_gait_checkpoint
+    - lidargaitpp_checkpoint
+    - yolov8n
+    - yolov8n_seg
+    - sam_vit_b
+
+assets:
+  yolov8n:
+    target: model_weights/yolov8n.pt
+    sha256: 31e20dde3def09e2cf938c7be6fe23d9150bbbe503982af13345706515f2ef95
+    provider: ultralytics
+    model_id: yolov8n.pt
+  yolov8n_seg:
+    target: model_weights/yolov8n-seg.pt
+    sha256: d39e867b2c3a5dbc1aa764411544b475cb14727bf6af1ec46c238f8bb1351ab9
+    provider: ultralytics
+    model_id: yolov8n-seg.pt
+  sam_vit_b:
+    target: model_weights/sam_vit_b_01ec64.pth
+    sha256: ec2df62732614e57411cdcf32a23ffdf28910380d03139ee0f4fcbe91eb8c912
+    provider: url
+    url: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+  pointnet_tmax_checkpoint:
+    target: model_bundles/pointnet_tmax_fixed_special5_seed0_split0/checkpoint.pt
+    sha256: 2c59f710ef48a3f793fd4bc2476a3ca1263cd8d961ff858ad5a143bfead2ca31
+    provider: project_release
+    release_name: pointnet_tmax_fixed_special5_seed0_split0.pt
+  mph_gait_checkpoint:
+    target: model_bundles/mph_gait_fixed_special5_seed0_split0/checkpoint.pt
+    sha256: 10b62e11786828e51f2287bd47cfbdf8c83ebf1e565d1426ec217ddff2f8222d
+    provider: project_release
+    release_name: mph_gait_fixed_special5_seed0_split0.pt
+  lidargaitpp_checkpoint:
+    target: model_bundles/lidargaitpp_fixed_special5_seed0_split0/checkpoint.pt
+    sha256: 2a1a44d2f900870654d7b93b11a72ad633b1392f5d185f5efde3c26529419a2b
+    provider: project_release
+    release_name: lidargaitpp_fixed_special5_seed0_split0.pt
