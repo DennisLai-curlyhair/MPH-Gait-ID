@@ -1,3 +1,9 @@
+"""LidarGait++ utilities derived from the official OpenGait implementation.
+
+Source: https://github.com/ShiqiYu/OpenGait, commit
+f754f6f3831e9f83bb28f4e2f63dd43d8bcf9dc4. Upstream terms remain applicable.
+"""
+
 import torch.nn as nn
 import torch.nn.functional as F
 import torch

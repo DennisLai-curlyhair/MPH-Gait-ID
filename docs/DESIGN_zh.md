@@ -45,6 +45,9 @@ Gallery Manager 以目前 model bundle、Frame 長度和點雲處理版本顯示
 
 模型 encode 與 Gallery match 分開計時；正式測量在第一個有效人體點雲後先暖機，再依指定秒數收集分布。recorder 只保留數值 samples、狀態計數與執行設定，不持有或序列化 RGB、Depth、點雲及 embedding。靜坐報告標記為 `stationary_efficiency_only`，禁止作為辨識準確率證據。
 
-## 尚待驗證
+## 驗證狀態
 
-辨識 threshold 尚未用目標場域資料校準。Azure Kinect 實機 FPS、長時間穩定度與人物遮罩對齊仍屬 hardware validation 項目。
+- Unknown-rejection threshold calibration: **TBD**
+- Azure Kinect hardware FPS: **TBD**
+- Long-duration stability: **TBD**
+- Person-mask alignment: **TBD**

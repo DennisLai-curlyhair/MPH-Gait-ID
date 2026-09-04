@@ -8,6 +8,16 @@ The repository is distributed with an empty gallery database. Enrollment data,
 captured frames, similarity logs, and performance reports are created locally
 and are excluded from version control.
 
+## Research Reproducibility Notice
+
+This repository is published to support academic evaluation and reproduction
+of the MPH-Gait identification workflow. Third-party projects, source-derived
+components, pretrained weights, names, and trademarks remain the property of
+their respective owners and are governed by their original terms. This project
+does not claim ownership of or grant additional rights to those materials. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the component inventory
+and upstream sources.
+
 ## Features
 
 - Offline enrollment and identification from point-cloud sequence folders.
@@ -250,6 +260,7 @@ apply the appropriate retention policy before collecting biometric data.
 
 ## Citation and License
 
-Complete `CITATION.cff.template` after the paper metadata is final. The
-project license is pending; see `LICENSE_PENDING.md`. Third-party model and
+Publication citation metadata: **TBD** (`CITATION.cff.template`).
+
+Project license: **TBD** (`LICENSE_PENDING.md`). Third-party model and
 software notices are listed in `THIRD_PARTY_NOTICES.md`.

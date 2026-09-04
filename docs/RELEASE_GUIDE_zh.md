@@ -16,10 +16,10 @@ README / design / validation documents
 `.gitignore` 已排除：
 
 ```text
-*.pt / *.pth checkpoints
 Gallery SQLite databases
 outputs / live enrollment sessions / caches
 virtual environments / IDE files / Python bytecode
+SAM ViT-B optional checkpoint
 ```
 
 大型模型建議放 GitHub Release、Hugging Face 或機構檔案服務，並保留
@@ -45,8 +45,8 @@ replay 通過寫成 Azure Kinect hardware validated。
 
 ## 授權
 
-公開前必須決定本專案程式碼與資料集授權，並逐一確認 OpenGait／LidarGait++、
-Ultralytics YOLO、Meta SAM、Azure Kinect SDK 與 checkpoints 的再散布條款。
-在授權盤點完成前，不應直接把所有第三方程式碼與權重推到公開 repository。
+專案授權：**TBD**
+
+第三方模型與權重再散布狀態：**TBD**
 
 詳見 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。

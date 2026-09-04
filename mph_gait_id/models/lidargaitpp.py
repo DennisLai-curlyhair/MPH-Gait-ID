@@ -1,3 +1,10 @@
+"""Standalone inference adapter for the LidarGait++ architecture.
+
+The architecture and parameter layout follow the official OpenGait source at
+commit f754f6f3831e9f83bb28f4e2f63dd43d8bcf9dc4. OpenGait and LidarGait++ are
+not authored or owned by this project; their upstream terms remain applicable.
+"""
+
 from __future__ import annotations
 
 from typing import Any
