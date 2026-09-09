@@ -27,6 +27,9 @@ and upstream sources.
 - PointNet-TMax, MPH-Gait, and official-code adapted LidarGait++ model bundles.
 - Guided multi-pass enrollment with review, resume, and commit controls.
 - Gallery management with model/checkpoint/preprocessing compatibility keys.
+- [Portable Gallery export/import](docs/GALLERY_TRANSFER.md) with preview,
+  explicit identity-conflict resolution, model checks, deduplication, and backups
+  ([繁體中文](docs/GALLERY_TRANSFER_zh.md)).
 - Rank-based identity matching with configurable unknown-score, margin, and
   temporal-stability thresholds.
 - RGB, foreground point-cloud, FPS, predicted identity, and similarity displays.

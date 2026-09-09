@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 
 from ..controller import GaitApplicationController
 from ..i18n import I18n
+from .gallery_transfer import GalleryTransferDialog
 
 
 class GalleryManagerPage(ttk.Frame):
@@ -17,12 +18,15 @@ class GalleryManagerPage(ttk.Frame):
         master: tk.Misc,
         controller: GaitApplicationController,
         on_changed: Callable[[], None] | None = None,
+        transfer_available: Callable[[], tuple[bool, str]] | None = None,
     ) -> None:
         super().__init__(master, padding=14)
         self.controller = controller
         shared_i18n = getattr(self.winfo_toplevel(), "_gait_i18n", None)
         self.i18n: I18n = shared_i18n if isinstance(shared_i18n, I18n) else I18n("en")
         self.on_changed = on_changed
+        self.transfer_available = transfer_available
+        self.transfer_dialog: GalleryTransferDialog | None = None
         self.bundle_var = tk.StringVar()
         self.clip_len_var = tk.IntVar(value=15)
         self.processing_version_var = tk.StringVar()
@@ -40,6 +44,12 @@ class GalleryManagerPage(ttk.Frame):
         header = ttk.Frame(self)
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
+        self.export_button = ttk.Button(header, text="Export all Gallery",
+                                        command=lambda: self._transfer("export"))
+        self.export_button.grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self.import_button = ttk.Button(header, text="Import Gallery",
+                                        command=lambda: self._transfer("import"))
+        self.import_button.grid(row=2, column=1, sticky="e", pady=(8, 0))
         ttk.Label(header, text="Gallery Manager", style="Header.TLabel").grid(
             row=0, column=0, sticky="w"
         )
@@ -165,7 +175,26 @@ class GalleryManagerPage(ttk.Frame):
     def _bundle_id(self) -> str | None:
         return self.bundle_labels.get(self.bundle_var.get())
 
+    def _transfer(self, operation: str) -> None:
+        if self.transfer_dialog is not None and self.transfer_dialog.winfo_exists():
+            self.transfer_dialog.lift()
+            return
+        if self.transfer_available:
+            allowed, reason = self.transfer_available()
+            if not allowed:
+                messagebox.showwarning("Gallery", reason, parent=self)
+                return
+        def changed() -> None:
+            self.refresh_bundles()
+            if self.on_changed:
+                self.on_changed()
+        self.transfer_dialog = GalleryTransferDialog(
+            self, self.controller, operation, self.i18n.locale, changed,
+        )
+
     def set_locale(self, locale_name: str) -> None:
+        self.export_button.configure(text="匯出全部 Gallery" if locale_name == "zh_TW" else "Export all Gallery")
+        self.import_button.configure(text="匯入 Gallery" if locale_name == "zh_TW" else "Import Gallery")
         display = self.controller.processing_version_name(locale_name)
         self.processing_version_combo.configure(values=[display])
         self.processing_version_var.set(display)

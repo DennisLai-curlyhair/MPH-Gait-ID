@@ -7,6 +7,7 @@ run from the repository root unless otherwise stated.
 | Guide | English | Traditional Chinese |
 |---|---|---|
 | Interface and enrollment workflow | [UI guide](UI_GUIDE.md) | [UI guide](UI_GUIDE_zh.md) |
+| Move registered features between computers | [Gallery transfer](GALLERY_TRANSFER.md) | [Gallery 匯出／匯入](GALLERY_TRANSFER_zh.md) |
 | Architecture and system boundaries | [System design](DESIGN.md) | [System design](DESIGN_zh.md) |
 | Live efficiency measurement | [Performance benchmark](PERFORMANCE_BENCHMARK_GUIDE.md) | [Performance benchmark](PERFORMANCE_BENCHMARK_GUIDE_zh.md) |
 

@@ -10,6 +10,7 @@ from typing import Any, Callable, Sequence
 
 from .config import DEFAULT_CONFIG_PATH, load_config, nested, resolve_system_path
 from .database import GalleryRepository
+from .gallery_transfer import GalleryTransfer
 from .model_store import ModelBundle, ModelStore
 from .runtime import EmbeddingBatch, SystemModelRuntime
 from .services import RecognitionService, RegistrationService
@@ -181,6 +182,21 @@ class GaitApplicationController:
         self.model_store.get(bundle_id)
         model_keys = self._compatible_model_keys(bundle_id)
         return self.repository.deactivate_person_embeddings(person_id, model_keys)
+
+    def gallery_transfer(self) -> GalleryTransfer:
+        return GalleryTransfer(self.repository, self.model_store, self.processing_version_id())
+
+    def export_gallery(self, path: str | Path) -> dict[str, Any]:
+        return self.gallery_transfer().export(path)
+
+    def preview_gallery_import(self, path: str | Path) -> dict[str, Any]:
+        return self.gallery_transfer().preview(path)
+
+    def import_gallery(
+        self, path: str | Path, preview: dict[str, Any],
+        person_map: dict[str, str | None],
+    ) -> dict[str, Any]:
+        return self.gallery_transfer().import_archive(path, preview, person_map)
 
     def processing_version_id(self) -> str:
         return str(

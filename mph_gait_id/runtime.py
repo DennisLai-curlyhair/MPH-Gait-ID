@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +9,7 @@ import numpy as np
 from .dataio import build_window_dataset
 from .identity import parse_sequence_metadata
 from .model_adapter import ModelAdapter
+from .model_record import build_model_record
 from .model_store import ModelBundle, ModelStore
 from .source_fingerprint import compute_source_fingerprint
 
@@ -81,49 +80,11 @@ class SystemModelRuntime:
         return embedding_dim
 
     def _build_model_record(self, embedding_dim: int | None = None) -> dict[str, Any]:
-        manifest = self.adapter.manifest()
-        embedding_dim = int(embedding_dim or self._configured_embedding_dim())
-        try:
-            checkpoint_path = str(
-                self.bundle.checkpoint.relative_to(self.model_store.root.parent)
-            )
-        except ValueError:
-            checkpoint_path = str(self.bundle.checkpoint)
-        compatibility = {
-            "bundle_id": self.bundle.bundle_id,
-            "method_key": self.bundle.method_key,
-            "architecture": self.bundle.architecture,
-            "input_type": self.bundle.input_type,
-            "input_mode": self.bundle.mode,
-            "checkpoint_sha256": self.bundle.checkpoint_sha256,
-            # Sequence length changes the deployment embedding distribution even
-            # when the architecture accepts a variable T. Keep T=15 and T=30
-            # Gallery records in different compatibility spaces.
-            "clip_len": self.runtime_clip_len,
-            "drop_first_frames": self.runtime_drop_first_frames,
-            "embedding_dim": embedding_dim,
-            "num_points": manifest.get("num_points"),
-            "point_normalization": self.bundle.model.get("point_normalization"),
-            "preprocessing_profile_id": self.preprocessing_profile_id,
-        }
-        digest = hashlib.sha256(
-            json.dumps(compatibility, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        return {
-            "model_key": f"{self.bundle.bundle_id}_{digest[:16]}",
-            "bundle_id": self.bundle.bundle_id,
-            "method_key": self.bundle.method_key,
-            "display_name": self.bundle.display_name,
-            "architecture": self.bundle.architecture,
-            "input_type": self.bundle.input_type,
-            "input_mode": self.bundle.mode,
-            "fold": self.bundle.fold,
-            "checkpoint_path": checkpoint_path,
-            "checkpoint_sha256": self.bundle.checkpoint_sha256,
-            "embedding_dim": embedding_dim,
-            "compatibility": compatibility,
-            "research_fold_checkpoint": self.bundle.fold >= 0,
-        }
+        return build_model_record(
+            self.bundle, self.model_store, self.runtime_clip_len,
+            self.runtime_drop_first_frames, self.preprocessing_profile_id,
+            embedding_dim=embedding_dim,
+        )
 
     def extract_folder(
         self,
