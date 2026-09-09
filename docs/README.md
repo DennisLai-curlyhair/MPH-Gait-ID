@@ -9,10 +9,11 @@ run from the repository root unless otherwise stated.
 | Interface and enrollment workflow | [UI guide](UI_GUIDE.md) | [UI guide](UI_GUIDE_zh.md) |
 | Architecture and system boundaries | [System design](DESIGN.md) | [System design](DESIGN_zh.md) |
 | Live efficiency measurement | [Performance benchmark](PERFORMANCE_BENCHMARK_GUIDE.md) | [Performance benchmark](PERFORMANCE_BENCHMARK_GUIDE_zh.md) |
-| Repository packaging and validation | [Release guide](RELEASE_GUIDE.md) | [Release guide](RELEASE_GUIDE_zh.md) |
 
 Additional references:
 
+- [Security and local data handling](../SECURITY.md): trusted checkpoints,
+  dependency limitations, private gallery data, and security reporting.
 - [Final-24 deployment weights](FINAL24_WEIGHTS.md): included checkpoints,
   provenance, compatibility, and re-enrollment requirements.
 - [Model bundles](../mph_gait_id/model_bundles/README.md): bundle metadata and

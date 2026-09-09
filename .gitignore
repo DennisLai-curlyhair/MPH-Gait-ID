@@ -54,3 +54,76 @@ live_enrollment_sessions/
 *.tmp
 *.bak
 *.orig
+
+# Local credentials and signing keys
+.env
+.env.*
+*.env
+!.env.example
+!.env.template
+.envrc
+.netrc
+.pypirc
+.npmrc
+.aws/
+.azure/
+.gcloud/
+.ssh/
+secrets/
+.secrets/
+credentials/
+credentials.json
+service-account*.json
+service_account*.json
+token.json
+tokens.json
+id_rsa
+id_ed25519
+id_ecdsa
+id_dsa
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Database sidecars may contain the same private data as the database
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-*
+*.sqlite3-*
+*.db-*
+
+# Raw samples, recordings, and externally distributed archives
+*.npy
+*.npz
+*.pcd
+*.ply
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.7z
+*.rar
+captures/
+capture/
+recordings/
+raw_data/
+dataset_proj/
+
+# Local tool state and test outputs
+.cache/
+.ipynb_checkpoints/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Maintainer-only documentation is kept outside the public repository
+docs/RELEASE_GUIDE*.md
+
+# Imported bundle metadata can include personal names and local paths
+mph_gait_id/model_bundles/user_*/

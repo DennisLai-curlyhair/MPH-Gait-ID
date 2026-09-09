@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -14,12 +15,15 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = ROOT / "mph_gait_id"
 FORBIDDEN_TEXT = (
-    "/home/yenting/",
     "Point_Cloud_Gait_Recognition_V2/",
     "gait_identity_system_realtime_v7",
     "gallery_v7.sqlite3",
     "outputs_v7",
 )
+LOCAL_HOME_PATH = re.compile(
+    r"""(?:/(?:home|Users)/[^/\s"'<>]+/|[A-Za-z]:\\+Users\\+[^\\\s"'<>]+\\+)"""
+)
+
 
 
 def sha256(path: Path) -> str:
@@ -81,6 +85,8 @@ def validate_text() -> list[str]:
         if path.suffix.lower() not in suffixes:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
+        if LOCAL_HOME_PATH.search(text):
+            failures.append(f"{path.relative_to(ROOT)}: local home-directory path")
         for marker in FORBIDDEN_TEXT:
             if marker in text:
                 failures.append(f"{path.relative_to(ROOT)}: {marker}")

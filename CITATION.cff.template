@@ -7,7 +7,7 @@ authors:
     given-names: "TBD"
 version: "0.1.0"
 date-released: "TBD"
-repository-code: "TBD"
+repository-code: "https://github.com/DennisLai-curlyhair/MPH-Gait-ID"
 preferred-citation:
   type: conference-paper
   title: "MPH-Gait: Lightweight Multi-Scale Point-Hierarchy Gait Identification from Raw Point Clouds"

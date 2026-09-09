@@ -120,6 +120,11 @@ Final-24 bundle. Existing gallery entries are retained for their original model.
 
 ## Requirements
 
+Only import trusted checkpoints. The current loader uses unrestricted PyTorch
+pickle loading, and the historical dependency range requires security review.
+See [Security and local data handling](SECURITY.md) before using custom weights
+or deploying the application.
+
 ### Core Offline Application
 
 - Python 3.10 or 3.11
@@ -259,7 +264,10 @@ python mph_gait_id/scripts/download_assets.py --profile final24 --check
 
 ## Validation and Tests
 
+Install the test dependencies, then run:
+
 ```bash
+python -m pip install -e '.[dev]'
 python -m compileall -q mph_gait_id
 python -m pytest mph_gait_id/tests
 python mph_gait_id/scripts/validate_model_bundles.py
@@ -283,10 +291,10 @@ English and Traditional Chinese guides are listed in the
 | Interface and enrollment | [UI guide](docs/UI_GUIDE.md) | [UI guide](docs/UI_GUIDE_zh.md) |
 | System architecture | [Design](docs/DESIGN.md) | [Design](docs/DESIGN_zh.md) |
 | Live efficiency measurement | [Benchmark](docs/PERFORMANCE_BENCHMARK_GUIDE.md) | [Benchmark](docs/PERFORMANCE_BENCHMARK_GUIDE_zh.md) |
-| Repository release | [Release guide](docs/RELEASE_GUIDE.md) | [Release guide](docs/RELEASE_GUIDE_zh.md) |
 
 For included deployment checkpoints and re-enrollment requirements, see
-[Final-24 deployment weights](docs/FINAL24_WEIGHTS.md).
+[Final-24 deployment weights](docs/FINAL24_WEIGHTS.md). Security reporting and
+trusted-input requirements are in [SECURITY.md](SECURITY.md).
 
 <!-- ## Privacy and Generated Data
 
