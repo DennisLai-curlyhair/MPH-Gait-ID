@@ -273,11 +273,11 @@ Replay tools accept synchronized RGB/depth/XYZ folders and allow pipeline
 testing without an attached Kinect device. See `docs/UI_GUIDE_zh.md` and
 `docs/DESIGN_zh.md` for the interface and system boundaries.
 
-## Privacy and Generated Data
+<!-- ## Privacy and Generated Data
 
 Do not commit `data/`, `outputs/`, captured RGB/depth frames, person
 identifiers, or gallery databases. Obtain the required participant consent and
-apply the appropriate retention policy before collecting biometric data.
+apply the appropriate retention policy before collecting biometric data. -->
 
 ## Citation and License
 
