@@ -135,6 +135,8 @@ class GalleryTransferDialog(tk.Toplevel):
                     self.status.set(self.tr("Import complete", "匯入完成") + "\n" +
                                     self.tr("Added / duplicates / skipped", "新增／重複／略過") +
                                     f": {result['inserted']} / {result['duplicates']} / {result['skipped']}")
+                    self.status.set(self.status.get() + self.tr("; previously deleted: ", "；已刪除而略過：")
+                                    + str(result.get("deleted_skipped", 0)))
                     self.notes.set(self.tr("Backup", "備份") + f": {result['backup']}\n" +
                                    self.tr("Retained package", "保留匯入包") + f": {result['retained_archive']}")
                     if self.on_changed:
@@ -146,20 +148,24 @@ class GalleryTransferDialog(tk.Toplevel):
         for person in preview["persons"]:
             uid = person["uid"]
             self.people[uid] = person
-            self.person_map[uid] = None if person["status"] == "conflict" else person["target_id"]
+            self.person_map[uid] = None if person["status"] in {"conflict", "deleted"} else person["target_id"]
             self.person_tree.insert("", "end", iid=uid, values=(
                 person["person_id"], person["display_name"],
-                self.tr(person["status"], {"new": "新增", "linked": "已對應", "conflict": "ID 衝突"}[person["status"]]),
+                self.tr(person["status"], {"new": "新增", "linked": "已對應", "conflict": "ID 衝突", "deleted": "已永久刪除（略過）"}[person["status"]]),
                 self.person_map[uid] or "-"))
         for key, model in preview["models"].items():
             self.model_tree.insert("", "end", iid=key, values=(
                 model["display_name"], self.tr(model["status"], "相容" if model["target"] else "無可用相容模型"),
                 model["target"]["bundle_id"] if model["target"] else "-"))
         self.status.set(self.tr("Available / unavailable / previously imported embeddings", "可用／不相容／已匯入過的特徵") +
-                        f": {preview['compatible_embeddings']} / {preview['unavailable_embeddings']} / {preview['known_embedding_ids']}")
+                        f": {preview['compatible_embeddings']} / {preview['unavailable_embeddings']} / {preview['known_embedding_ids']}"
+                        + self.tr("; previously deleted: ", "；已永久刪除：")
+                        + str(preview.get("deleted_embeddings", 0)))
         self.notes.set(self.tr(
             "ID conflicts default to Skip. Missing/incompatible models remain in the retained package; install matching bundles and import again. Bundle settings describe the exporter, not historical enrollment settings. Confirm they have not changed since enrollment.",
-            "ID 衝突預設略過。不相容模型的特徵保留在匯入包，安裝相符模型後可重新匯入。Bundle 設定為匯出當下的版本，請確認與原註冊時一致。"))
+            "ID 衝突預設略過。不相容模型的特徵保留在匯入包，安裝相符模型後可重新匯入。Bundle 設定為匯出當下的版本，請確認與原註冊時一致。")
+                        + self.tr(" Locally deleted identities and embeddings cannot be restored by reimport.",
+                                                " 本機已永久刪除的人物與特徵不會因重新匯入而恢復。"))
         self.apply_button.configure(state="normal")
 
     def _selected(self) -> str | None:
@@ -168,10 +174,14 @@ class GalleryTransferDialog(tk.Toplevel):
 
     def _actions(self) -> None:
         enabled = self._selected() is not None and not self.worker.busy and self.operation == "preview"
+        if enabled and self.people[self._selected()]["status"] == "deleted":
+            enabled = False
         for button in self.edit_buttons:
             button.configure(state="normal" if enabled else "disabled")
 
     def _set_target(self, uid: str, target: str | None) -> None:
+        if self.people[uid]["status"] == "deleted" and target is not None:
+            return
         self.person_map[uid] = target
         self.person_tree.set(uid, "target", target or "-")
 
@@ -179,7 +189,7 @@ class GalleryTransferDialog(tk.Toplevel):
         uid = self._selected()
         if uid is None:
             return
-        if self.people[uid]["status"] == "linked":
+        if self.people[uid]["status"] in {"linked", "deleted"}:
             messagebox.showinfo(self.title(), self.tr("Previously linked identities cannot be remapped.", "已匯入的人物不可重新對應 ID。"), parent=self)
             return
         target = simpledialog.askstring(self.title(), self.tr("New person ID", "新的人物 ID"), parent=self)
@@ -195,7 +205,7 @@ class GalleryTransferDialog(tk.Toplevel):
         uid = self._selected()
         if uid is None:
             return
-        if self.people[uid]["status"] == "linked":
+        if self.people[uid]["status"] in {"linked", "deleted"}:
             return
         target = simpledialog.askstring(self.title(), self.tr("Existing local person ID", "本機既有人物 ID"), parent=self)
         if not target:

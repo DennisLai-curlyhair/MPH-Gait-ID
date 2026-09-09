@@ -27,6 +27,8 @@ and upstream sources.
 - PointNet-TMax, MPH-Gait, and official-code adapted LidarGait++ model bundles.
 - Guided multi-pass enrollment with review, resume, and commit controls.
 - Gallery management with model/checkpoint/preprocessing compatibility keys.
+- [Person rename and scoped permanent deletion](docs/GALLERY_MANAGEMENT.md),
+  with pre-edit backups and protection against reimporting deleted identities.
 - [Portable Gallery export/import](docs/GALLERY_TRANSFER.md) with preview,
   explicit identity-conflict resolution, model checks, deduplication, and backups
   ([繁體中文](docs/GALLERY_TRANSFER_zh.md)).

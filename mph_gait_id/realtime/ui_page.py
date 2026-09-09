@@ -1460,7 +1460,9 @@ class RealtimePage(ttk.Frame):
                 return self._reject_start(
                     "Person ID conflict",
                     f"{person_id} is already registered as "
-                    f"{existing['display_name']}.",
+                    f"{existing['display_name']}. "
+                    "同一人改名：請到 Gallery 管理 → 修改人物名稱，再重新註冊。 "
+                    "For the same person, rename via Gallery Manager before enrolling again.",
                 )
         config = RealtimeConfig(
             bundle_id=bundle_id,

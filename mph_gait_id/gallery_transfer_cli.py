@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
         plan = json.loads(Path(args.preview_file).read_text(encoding="utf-8"))
         mapping = (
             json.loads(Path(args.person_map).read_text(encoding="utf-8")) if args.person_map
-            else {person["uid"]: None if person["status"] == "conflict" else person["target_id"]
+            else {person["uid"]: None if person["status"] in {"conflict", "deleted"} else person["target_id"]
                   for person in plan["persons"]}
         )
         result = controller.import_gallery(args.archive, plan, mapping)

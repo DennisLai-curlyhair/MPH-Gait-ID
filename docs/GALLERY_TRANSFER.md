@@ -84,6 +84,16 @@ preview, repeat the preview. Validation/merge errors roll back Gallery writes;
 the retained package and backup may remain. Existing inactive embeddings are not
 reactivated by repeated import. Deleted imported rows are not silently restored.
 
+Permanent deletions made through [Gallery Manager](GALLERY_MANAGEMENT.md) are
+tracked locally: deleted people appear as **deleted** and must remain skipped;
+deleted embeddings are skipped with a separate count. Reused Person IDs receive
+new portable identities. These safeguards do not delete data on other computers
+or revoke archives. Raw SQLite deletion is unsupported and may require repair
+before an archive can be imported again.
+
+Export also persists portable identity mappings. Management and transfer share
+the same local deletion history; the archive format remains version 1.
+
 Storage is relative to the configured database, not the source computer:
 
 ```text

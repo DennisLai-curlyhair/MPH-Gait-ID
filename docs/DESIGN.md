@@ -95,9 +95,19 @@ rolls back the batch to avoid partially registered identities.
 ## Gallery Management
 
 Gallery Manager filters records by the current model bundle, frame length, and
-point-cloud processing version. Individual sources or passes can be disabled
-and restored. All descriptors for one person within the current compatibility
-scope can also be disabled without affecting another model's gallery.
+point-cloud processing version. Passes can be disabled and restored; the Offline
+source/person controls perform soft deactivation. A separate lifecycle service
+supports global display-name changes, exact fragment deletion, and all-model
+person deletion, with verified pre-edit backups and transactional rollback.
+
+`gallery_lifecycle.py` and `gallery_transfer.py` share portable identity and
+deletion bookkeeping in `gallery_provenance.py`. Person IDs are display-facing
+identifiers, while portable UIDs distinguish separate identity lifetimes. Known
+deleted UIDs are locally blocked from reimport; reusing a visible Person ID does
+not reuse the retired portable identity. Deletion history is not synchronized
+to other PCs. No encoder, weight, model-key or archive-format changes are required.
+See [Gallery management](GALLERY_MANAGEMENT.md) and
+[Gallery transfer](GALLERY_TRANSFER.md) for recovery and privacy boundaries.
 
 ## Live Performance Measurement
 

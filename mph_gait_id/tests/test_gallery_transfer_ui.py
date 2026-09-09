@@ -27,10 +27,11 @@ class TransferUiGuardTest(unittest.TestCase):
         )
         GalleryTransferDialog._show_preview(fake, {
             "persons": [{"uid": "a", "person_id": "P1", "display_name": "A", "status": "conflict", "target_id": "P1"},
-                        {"uid": "b", "person_id": "P2", "display_name": "B", "status": "new", "target_id": "P2"}],
+                        {"uid": "b", "person_id": "P2", "display_name": "B", "status": "new", "target_id": "P2"},
+                        {"uid": "c", "person_id": "P3", "display_name": "C", "status": "deleted", "target_id": "P3"}],
             "models": {}, "compatible_embeddings": 0, "unavailable_embeddings": 0, "known_embedding_ids": 0,
         })
-        self.assertEqual(fake.person_map, {"a": None, "b": "P2"})
+        self.assertEqual(fake.person_map, {"a": None, "b": "P2", "c": None})
 
 
 class TransferDialogLayoutTest(unittest.TestCase):
