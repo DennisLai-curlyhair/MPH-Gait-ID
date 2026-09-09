@@ -1,0 +1,20 @@
+{
+  "source_run": "pointnet_tmax/20260817-182113_final24_len15_3seed/seed_2",
+  "source_checkpoint": "checkpoints/final.pt",
+  "source_checkpoint_sha256": "1bcd33341e724e8130247e4840d3e66869a4bf943677013a610d0b3c79decf8e",
+  "source_config_sha256": "55df08d596c0f1e038493b3b5d89d21f0ae3985169c3b61d7ae0f8fea30ae453",
+  "source_protocol_sha256": "eead2b695584960eda48ebbb0fb45cd653368bb2d26dcaafef7fbe05bd453e1a",
+  "exporter_sha256": "338873ba60af2329072aee9e84d067fb9d33b0d40e1f0afd01438abf060480d1",
+  "export_torch_version": "2.10.0",
+  "export_format": "inference_only_v1",
+  "state_dict_unchanged": true,
+  "excluded": [
+    "optimizer",
+    "scheduler",
+    "local_training_paths"
+  ],
+  "checkpoint": {
+    "file": "pointnet_tmax_final24_len15_seed2.pt",
+    "sha256": "889edd0770592bb134aa51de1a01a559d7da2f53d8129fb4d2dce6fe972e3aa7"
+  }
+}

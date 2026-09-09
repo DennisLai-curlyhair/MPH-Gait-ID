@@ -1,0 +1,20 @@
+{
+  "source_run": "mph_gait/20260817-182113_final24_len15_3seed/seed_2",
+  "source_checkpoint": "checkpoints/final.pt",
+  "source_checkpoint_sha256": "797839deab6790bb2768616283551e2e03ff91c442aa32c13495d7aa3792590c",
+  "source_config_sha256": "3cde1b2686bf5fe93c66c9493a3abfe59971366a3301b29cd0f180015c3a7de3",
+  "source_protocol_sha256": "eead2b695584960eda48ebbb0fb45cd653368bb2d26dcaafef7fbe05bd453e1a",
+  "exporter_sha256": "338873ba60af2329072aee9e84d067fb9d33b0d40e1f0afd01438abf060480d1",
+  "export_torch_version": "2.10.0",
+  "export_format": "inference_only_v1",
+  "state_dict_unchanged": true,
+  "excluded": [
+    "optimizer",
+    "scheduler",
+    "local_training_paths"
+  ],
+  "checkpoint": {
+    "file": "mph_gait_final24_len15_seed2.pt",
+    "sha256": "8c720330ff36f22d0966502a240a71e248649953ee99a83b0762bb866e9a073f"
+  }
+}

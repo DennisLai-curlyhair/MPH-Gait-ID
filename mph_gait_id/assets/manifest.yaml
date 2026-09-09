@@ -5,23 +5,51 @@ profiles:
     - pointnet_tmax_checkpoint
     - mph_gait_checkpoint
     - lidargaitpp_checkpoint
+    - pointnet_tmax_final24_checkpoint
+    - mph_gait_final24_checkpoint
+    - lidargaitpp_final24_checkpoint
   realtime-yolo:
     - pointnet_tmax_checkpoint
     - mph_gait_checkpoint
     - lidargaitpp_checkpoint
+    - pointnet_tmax_final24_checkpoint
+    - mph_gait_final24_checkpoint
+    - lidargaitpp_final24_checkpoint
     - yolov8n
     - yolov8n_seg
   sam:
     - sam_vit_b
+  final24:
+    - pointnet_tmax_final24_checkpoint
+    - mph_gait_final24_checkpoint
+    - lidargaitpp_final24_checkpoint
   all:
     - pointnet_tmax_checkpoint
     - mph_gait_checkpoint
     - lidargaitpp_checkpoint
+    - pointnet_tmax_final24_checkpoint
+    - mph_gait_final24_checkpoint
+    - lidargaitpp_final24_checkpoint
     - yolov8n
     - yolov8n_seg
     - sam_vit_b
 
 assets:
+  pointnet_tmax_final24_checkpoint:
+    target: model_bundles/pointnet_tmax_final24_len15_seed2/pointnet_tmax_final24_len15_seed2.pt
+    sha256: 889edd0770592bb134aa51de1a01a559d7da2f53d8129fb4d2dce6fe972e3aa7
+    provider: project_release
+    release_name: pointnet_tmax_final24_len15_seed2.pt
+  mph_gait_final24_checkpoint:
+    target: model_bundles/mph_gait_final24_len15_seed2/mph_gait_final24_len15_seed2.pt
+    sha256: 8c720330ff36f22d0966502a240a71e248649953ee99a83b0762bb866e9a073f
+    provider: project_release
+    release_name: mph_gait_final24_len15_seed2.pt
+  lidargaitpp_final24_checkpoint:
+    target: model_bundles/lidargaitpp_final24_len15_seed2/lidargaitpp_final24_len15_seed2.pt
+    sha256: 43dc5225036e9f06417c032baa80ad4bad5e5085b304745fd76724397a01331f
+    provider: project_release
+    release_name: lidargaitpp_final24_len15_seed2.pt
   yolov8n:
     target: model_weights/yolov8n.pt
     sha256: 31e20dde3def09e2cf938c7be6fe23d9150bbbe503982af13345706515f2ef95

@@ -39,6 +39,9 @@ outputs/*
 !mph_gait_id/model_bundles/pointnet_tmax_fixed_special5_seed0_split0/checkpoint.pt
 !mph_gait_id/model_bundles/mph_gait_fixed_special5_seed0_split0/checkpoint.pt
 !mph_gait_id/model_bundles/lidargaitpp_fixed_special5_seed0_split0/checkpoint.pt
+!mph_gait_id/model_bundles/pointnet_tmax_final24_len15_seed2/pointnet_tmax_final24_len15_seed2.pt
+!mph_gait_id/model_bundles/mph_gait_final24_len15_seed2/mph_gait_final24_len15_seed2.pt
+!mph_gait_id/model_bundles/lidargaitpp_final24_len15_seed2/lidargaitpp_final24_len15_seed2.pt
 
 # Optional large checkpoint
 mph_gait_id/model_weights/sam_vit_b_01ec64.pth

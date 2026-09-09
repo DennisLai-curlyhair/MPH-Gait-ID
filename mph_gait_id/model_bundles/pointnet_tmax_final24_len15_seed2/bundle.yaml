@@ -1,0 +1,72 @@
+schema_version: 1
+bundle_id: pointnet_tmax_final24_len15_seed2
+display_name: PointNet-TMax Final-24 len15 seed2
+method_key: pc_v1
+description: Final-24 deployment checkpoint; seed 2, final fixed training budget.
+architecture: pc_v1
+input:
+  type: pointcloud
+  mode: raw_pointcloud
+  channels: 3
+data:
+  num_points: 1024
+  clip_len: 15
+  drop_first_frames: 30
+  batch_size: 16
+  coordinate_adapter: kinect_xyz_mm_to_forward_lateral_height_m_v1
+model:
+  name: pc_v1
+  num_classes: 29
+  in_channels: 3
+  point_channels:
+  - 64
+  - 128
+  - 256
+  - 512
+  embedding_dim: 256
+  temporal_pool: max
+  dropout: 0.0
+  point_normalization: center
+training:
+  fold: -1
+  seed: 2
+  protocol: final24_fixed5_eval_v1
+  checkpoint_policy: last_fixed_budget
+  seed_selection: publisher_selected_deployment_seed
+  train_ids:
+  - 1
+  - 2
+  - 4
+  - 5
+  - 6
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 20
+  - 21
+  - 22
+  - 23
+  - 24
+  - 25
+  - 27
+  - 28
+  - 29
+  evaluation_ids:
+  - 3
+  - 7
+  - 18
+  - 19
+  - 26
+  validation_ids: []
+  amp: false
+  epoch: 50
+checkpoint:
+  file: pointnet_tmax_final24_len15_seed2.pt
+  sha256: 889edd0770592bb134aa51de1a01a559d7da2f53d8129fb4d2dce6fe972e3aa7

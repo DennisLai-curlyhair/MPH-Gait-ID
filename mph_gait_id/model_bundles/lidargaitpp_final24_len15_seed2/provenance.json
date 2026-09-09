@@ -1,0 +1,20 @@
+{
+  "source_run": "lidargaitpp/20260817-182113_final24_len15_3seed/seed_2",
+  "source_checkpoint": "train_work/output/Final24_LidarGaitPP_final24_len15_seed2_split0/LidarGaitPlusPlus/lidargaitpp_final24_len15_seed2_split0/checkpoints/lidargaitpp_final24_len15_seed2_split0-10000.pt",
+  "source_checkpoint_sha256": "900279627a697deeb7d34fa40a91fa0b839f4a3349726cd0172581a88dab1075",
+  "source_config_sha256": "ed58a94d4425a879cfe1c410550bb92cc427e74165008d000c4d4bc801439b10",
+  "source_protocol_sha256": "eead2b695584960eda48ebbb0fb45cd653368bb2d26dcaafef7fbe05bd453e1a",
+  "exporter_sha256": "338873ba60af2329072aee9e84d067fb9d33b0d40e1f0afd01438abf060480d1",
+  "export_torch_version": "2.10.0",
+  "export_format": "inference_only_v1",
+  "state_dict_unchanged": true,
+  "excluded": [
+    "optimizer",
+    "scheduler",
+    "local_training_paths"
+  ],
+  "checkpoint": {
+    "file": "lidargaitpp_final24_len15_seed2.pt",
+    "sha256": "43dc5225036e9f06417c032baa80ad4bad5e5085b304745fd76724397a01331f"
+  }
+}

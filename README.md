@@ -92,9 +92,12 @@ MPH-Gait-ID/
 
 | Asset | Included | Approximate size |
 |---|---:|---:|
-| PointNet-TMax gait checkpoint | yes | 3.8 MB |
-| MPH-Gait checkpoint | yes | 4.9 MB |
-| Adapted LidarGait++ checkpoint | yes | 19.7 MB |
+| PointNet-TMax, Fixed-Special5 seed0 split0 | yes | 3.8 MB |
+| MPH-Gait, Fixed-Special5 seed0 split0 | yes | 4.9 MB |
+| Adapted LidarGait++, Fixed-Special5 seed0 split0 | yes | 19.7 MB |
+| PointNet-TMax, Final-24 len15 seed2 | yes | 1.28 MB |
+| MPH-Gait, Final-24 len15 seed2 | yes | 1.66 MB |
+| Adapted LidarGait++, Final-24 len15 seed2 | yes | 10.21 MB |
 | YOLOv8n detector | yes | 6.5 MB |
 | YOLOv8n-seg detector | yes | 7.1 MB |
 | SAM ViT-B checkpoint | no, optional download | 375 MB |
@@ -102,6 +105,18 @@ MPH-Gait-ID/
 All included files are verified against
 `mph_gait_id/assets/manifest.yaml`. The SAM checkpoint is optional because
 YOLO segmentation is the default and lower-cost foreground extractor.
+
+The Final-24 bundles use 24 training identities and retain the final checkpoint
+of the prescribed budget: 50 epochs for PointNet-TMax and MPH-Gait, and 10,000
+iterations for adapted LidarGait++. These are inference-only exports with
+unchanged model tensors; optimizer states and local training paths are omitted.
+Seed 2 is a deployment release choice, not a claim that it is the best seed for
+every model or endpoint. See [Final-24 deployment weights](docs/FINAL24_WEIGHTS.md).
+
+Select a `Final-24 len15 seed2` entry in the model selector to use the new
+weights. The existing default bundle is unchanged. Final-24 and Fixed-Special5
+descriptors are incompatible: enroll identities again under the selected
+Final-24 bundle. Existing gallery entries are retained for their original model.
 
 ## Requirements
 
@@ -219,7 +234,7 @@ Each directory below `mph_gait_id/model_bundles/` contains:
 
 ```text
 bundle.yaml
-checkpoint.pt
+<checkpoint filename declared in bundle.yaml>
 ```
 
 `bundle.yaml` records architecture, input channels, coordinate convention,
@@ -234,6 +249,12 @@ Large future release weights can be hosted separately by setting
 
 ```bash
 python mph_gait_id/scripts/download_assets.py --profile offline-demo
+```
+
+Verify only the included Final-24 weights without downloading:
+
+```bash
+python mph_gait_id/scripts/download_assets.py --profile final24 --check
 ```
 
 ## Validation and Tests
