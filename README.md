@@ -270,8 +270,23 @@ python mph_gait_id/scripts/validate_enrollment_review_resume.py
 ```
 
 Replay tools accept synchronized RGB/depth/XYZ folders and allow pipeline
-testing without an attached Kinect device. See `docs/UI_GUIDE_zh.md` and
-`docs/DESIGN_zh.md` for the interface and system boundaries.
+testing without an attached Kinect device. See the [UI guide](docs/UI_GUIDE.md)
+and [system design](docs/DESIGN.md) for the interface and system boundaries.
+
+## Documentation
+
+English and Traditional Chinese guides are listed in the
+[documentation index](docs/README.md).
+
+| Guide | English | Traditional Chinese |
+|---|---|---|
+| Interface and enrollment | [UI guide](docs/UI_GUIDE.md) | [UI guide](docs/UI_GUIDE_zh.md) |
+| System architecture | [Design](docs/DESIGN.md) | [Design](docs/DESIGN_zh.md) |
+| Live efficiency measurement | [Benchmark](docs/PERFORMANCE_BENCHMARK_GUIDE.md) | [Benchmark](docs/PERFORMANCE_BENCHMARK_GUIDE_zh.md) |
+| Repository release | [Release guide](docs/RELEASE_GUIDE.md) | [Release guide](docs/RELEASE_GUIDE_zh.md) |
+
+For included deployment checkpoints and re-enrollment requirements, see
+[Final-24 deployment weights](docs/FINAL24_WEIGHTS.md).
 
 <!-- ## Privacy and Generated Data
 
