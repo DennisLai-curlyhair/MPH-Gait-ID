@@ -198,6 +198,35 @@ Set-ExecutionPolicy -Scope Process Bypass
 The pinned Windows preset is stored in `requirements-windows.txt`. A different
 PyTorch wheel may be required for newer GPU drivers.
 
+## Upgrading to v0.3.0
+
+This release adds saved enrollment foreground sources and multi-model
+registration. Existing model-specific Gallery descriptors remain usable; saved
+source recordings from the source-library version can be reused without
+recapture. Descriptors alone cannot reconstruct the original point clouds.
+
+Before upgrading, commit or abandon pending enrollment reviews, close all app
+instances, and back up the complete local data directory. With the default
+configuration, the database and source files belong together:
+
+```text
+data/
+  gallery.sqlite3
+  gallery.sqlite3_enrollment_sources/
+```
+
+Updating the same checkout preserves these ignored local files. For a fresh
+checkout or another computer, copy the complete backed-up data directory before
+starting the app, and copy any custom model bundles as well. Do not overwrite a
+destination database that already contains new enrollments. For a custom Gallery
+path, preserve its matching `<database filename>_enrollment_sources/` directory.
+A `.mphgallery` export transfers descriptors only, not source recordings.
+
+Reinstall the editable package in the existing environment with
+`python -m pip install -e .`. Source-library and registration-job tables are
+initialized automatically; no manual SQL migration is required. See
+[CHANGELOG.md](CHANGELOG.md) for the release changes.
+
 ## Start the Application
 
 After installation, use any of the following:
