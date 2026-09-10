@@ -79,6 +79,17 @@ class GaitApplicationController:
             template_bundle_id=template_bundle_id,
         )
 
+    def register_from_source(self, source_id, targets, pass_ids, **options):
+        from .enrollment_sources import EnrollmentSourceLibrary
+        from .source_registration import SourceRegistrationService
+
+        with self._runtime_lock:
+            self._runtime_cache.clear()
+            service = SourceRegistrationService(
+                EnrollmentSourceLibrary(self.repository), ModelStore(self.model_store.root),
+                self.processing_version_id())
+            return service.run(source_id, targets, pass_ids, **options)
+
     def database_summary(
         self,
         bundle_id: str | None = None,

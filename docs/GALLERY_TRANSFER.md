@@ -60,6 +60,9 @@ validated archive is retained locally. Install the matching bundle and import
 that retained archive again to add the remaining embeddings. Previously imported
 rows are deduplicated. An updated checkpoint or encoder needs re-enrollment;
 Stage A cannot reconstruct point clouds from embeddings.
+Opt-in [Stage B foreground recordings](ENROLLMENT_SOURCES.md) are stored
+separately and are not included in Gallery transfer archives or SQLite-only
+backups. Cross-model re-encoding remains a separate future stage.
 
 ## Integrity and Recovery
 

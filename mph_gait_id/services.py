@@ -7,6 +7,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from .database import GalleryRepository
+from .enrollment_sources import PreparedSource
 from .runtime import EmbeddingBatch
 from .source_fingerprint import compute_source_fingerprint
 
@@ -55,6 +56,7 @@ class RegistrationService:
         min_embeddings: int = 5,
         max_embeddings: int = 10,
         allow_duplicate_source: bool = False,
+        source_attachment: PreparedSource | None = None,
     ) -> dict[str, Any]:
         return self.enroll_many(
             batches=[batch],
@@ -64,6 +66,7 @@ class RegistrationService:
             min_embeddings=min_embeddings,
             max_embeddings_per_source=max_embeddings,
             allow_duplicate_source=allow_duplicate_source,
+            source_attachment=source_attachment,
         )
 
     def enroll_many(
@@ -75,11 +78,16 @@ class RegistrationService:
         min_embeddings: int = 5,
         max_embeddings_per_source: int = 10,
         allow_duplicate_source: bool = False,
+        source_attachment: PreparedSource | None = None,
     ) -> dict[str, Any]:
         """Enroll multiple sequences while retaining source-level provenance."""
 
         self.repository.initialize()
         items = list(batches)
+        if source_attachment is not None and (
+                source_attachment.capture.library.repository.path != self.repository.path
+                or len(items) != 1):
+            raise ValueError("A foreground source must attach to one batch in its own Gallery")
         if not items:
             raise ValueError("At least one enrollment source is required")
         if max_embeddings_per_source < min_embeddings:
@@ -204,6 +212,9 @@ class RegistrationService:
                         "source_metadata": batch.source_metadata,
                     }
                 )
+
+            if source_attachment is not None:
+                source_attachment.attach(connection, person_id, display_name, all_embedding_ids)
 
         combined = np.concatenate(selected_matrices, axis=0)
         first = source_results[0]

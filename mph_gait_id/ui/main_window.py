@@ -14,6 +14,7 @@ from mph_gait_id.i18n import I18n, LANGUAGE_CHOICES
 
 from .player import PreviewPlayer
 from .gallery_manager import GalleryManagerPage
+from .enrollment_sources import EnrollmentSourcesPage
 from .performance_benchmark import PerformanceBenchmarkPage
 from .scrollable import ScrollableFrame
 from .workers import BackgroundWorker, WorkerMessage
@@ -261,6 +262,10 @@ class GaitIdentityWindow:
             camera_available=self._camera_available_for_benchmark,
         )
         self.performance_page.grid(row=0, column=0, sticky="nsew")
+        self.sources_page = EnrollmentSourcesPage(
+            self.mode_notebook, self.controller, can_edit=self._source_edit_available,
+            on_gallery_changed=self._gallery_changed, prepare_encoding=self._prepare_source_encoding)
+        self.mode_notebook.add(self.sources_page, text="nav.sources")
         self.mode_notebook.bind(
             "<<NotebookTabChanged>>",
             lambda _event: self._on_mode_changed(),
@@ -278,6 +283,8 @@ class GaitIdentityWindow:
             self.gallery_page.set_locale(locale_name)
         if hasattr(self, "performance_page"):
             self.performance_page.set_locale(locale_name)
+        if hasattr(self, "sources_page"):
+            self.sources_page.set_locale(locale_name)
         self.i18n.apply(self.root)
 
     def _on_mode_changed(self) -> None:
@@ -289,8 +296,30 @@ class GaitIdentityWindow:
             self.gallery_page.refresh_bundles()
         elif self.mode_notebook.select() == str(self.performance_page_host):
             self.performance_page.refresh_bundles()
+        if hasattr(self, "sources_page"):
+            self.sources_page.pause()
+            if self.mode_notebook.select() == str(self.sources_page):
+                self.sources_page.refresh()
+
+    def _source_edit_available(self) -> tuple[bool, str]:
+        dialog = getattr(getattr(self, "gallery_page", None), "transfer_dialog", None)
+        if dialog is not None and dialog.winfo_exists():
+            return False, ("請先關閉 Gallery 匯出／匯入視窗。" if self.i18n.locale == "zh_TW"
+                           else "Close the Gallery export/import dialog first.")
+        return self._gallery_transfer_available()
+
+    def _source_operation_running(self) -> bool:
+        return bool(getattr(getattr(self, "sources_page", None), "busy", False))
+
+    def _prepare_source_encoding(self) -> None:
+        for name in ("realtime_page", "performance_page"):
+            pipeline = getattr(getattr(self, name, None), "pipeline", None)
+            if pipeline is not None and not pipeline.running:
+                pipeline._runtime = None
 
     def _camera_available_for_realtime(self) -> tuple[bool, str]:
+        if self._source_operation_running():
+            return False, "Enrollment source operation in progress."
         benchmark = getattr(self, "performance_page", None)
         pipeline = getattr(benchmark, "pipeline", None)
         if pipeline is not None and pipeline.running:
@@ -298,6 +327,8 @@ class GaitIdentityWindow:
         return True, ""
 
     def _camera_available_for_benchmark(self) -> tuple[bool, str]:
+        if self._source_operation_running():
+            return False, "Enrollment source operation in progress."
         realtime = getattr(self, "realtime_page", None)
         pipeline = getattr(realtime, "pipeline", None)
         if pipeline is not None and pipeline.running:
@@ -305,7 +336,9 @@ class GaitIdentityWindow:
         return True, ""
 
     def _gallery_transfer_available(self) -> tuple[bool, str]:
-        running = self.worker.busy
+        running = self.worker.busy or self._source_operation_running()
+        dialog = getattr(getattr(self, "gallery_page", None), "transfer_dialog", None)
+        running = running or (dialog is not None and dialog.winfo_exists() and dialog.worker.busy)
         for name in ("realtime_page", "performance_page"):
             pipeline = getattr(getattr(self, name, None), "pipeline", None)
             running = running or (pipeline is not None and pipeline.running)
@@ -839,6 +872,9 @@ class GaitIdentityWindow:
             messagebox.showerror("模型掃描失敗", str(exc))
 
     def _import_checkpoint(self) -> None:
+        if self._source_operation_running():
+            messagebox.showwarning("Please wait", "Enrollment source operation in progress.")
+            return
         selected = filedialog.askopenfilename(
             title="選擇可信任的 PyTorch checkpoint",
             filetypes=[("PyTorch checkpoint", "*.pt *.pth"), ("All files", "*.*")],
@@ -1132,7 +1168,7 @@ class GaitIdentityWindow:
         label: str,
         task: Callable[[Callable[[str], None]], OperationOutcome],
     ) -> None:
-        if self.worker.busy:
+        if self.worker.busy or self._source_operation_running():
             messagebox.showinfo("系統忙碌", "請等待目前操作完成。")
             return
         self._set_busy(True)
@@ -1582,6 +1618,12 @@ class GaitIdentityWindow:
             tree.delete(*children)
 
     def _close(self) -> None:
+        if (getattr(getattr(self, "realtime_page", None), "commit_pending", False)
+                or self._source_operation_running()):
+            messagebox.showwarning("Please wait", self.i18n.tr("sources.committing"), parent=self.root)
+            return
+        if hasattr(self, "sources_page"):
+            self.sources_page.pause()
         dialog = getattr(getattr(self, "gallery_page", None), "transfer_dialog", None)
         if dialog is not None and dialog.winfo_exists() and dialog.worker.busy:
             dialog.close()

@@ -30,6 +30,13 @@ realtime:
   reject_multiple_people_recognition: false
   multi_person_policy: primary_salience
   max_valid_frame_gap_seconds: 1.0
+  foreground_storage:
+    session_limit_bytes: 2147483648
+    library_limit_bytes: 21474836480
+    min_free_bytes: 536870912
+    queue_size: 8
+    max_frame_points: 2000000
+    max_frames: 9000
 
 benchmark:
   default_detector: yolo_seg

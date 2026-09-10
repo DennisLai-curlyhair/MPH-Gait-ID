@@ -86,6 +86,16 @@ class ModelBundle:
         }
 
 
+def descriptor_dimension(bundle: ModelBundle) -> int:
+    """Read the flattened inference dimension, including official part heads."""
+    if bundle.architecture == "lidargaitpp_official":
+        head = bundle.model.get("SeparateFCs", {})
+        channels = int(head.get("out_channels", bundle.model.get("embedding_dim", 256)))
+        parts = int(head.get("parts_num", bundle.model.get("parts_num", 31)))
+        return channels * parts
+    return int(bundle.model.get("embedding_dim", 256))
+
+
 class ModelStore:
     """Discovers, verifies, and imports self-contained model bundles."""
 

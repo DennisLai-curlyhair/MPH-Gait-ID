@@ -32,6 +32,11 @@ and upstream sources.
 - [Portable Gallery export/import](docs/GALLERY_TRANSFER.md) with preview,
   explicit identity-conflict resolution, model checks, deduplication, and backups
   ([繁體中文](docs/GALLERY_TRANSFER_zh.md)).
+- [Opt-in enrollment foreground source recording](docs/ENROLLMENT_SOURCES.md),
+  pass-level review, playback, storage limits, and independent source deletion
+  ([繁體中文](docs/ENROLLMENT_SOURCES_zh.md)).
+- [Multi-model registration from saved foreground sources](docs/SOURCE_REGISTRATION.md),
+  with per-model window lengths, progress, cancellation, and atomic Gallery writes.
 - Rank-based identity matching with configurable unknown-score, margin, and
   temporal-stability thresholds.
 - RGB, foreground point-cloud, FPS, predicted identity, and similarity displays.
@@ -193,6 +198,35 @@ Set-ExecutionPolicy -Scope Process Bypass
 The pinned Windows preset is stored in `requirements-windows.txt`. A different
 PyTorch wheel may be required for newer GPU drivers.
 
+## Upgrading to v0.3.0
+
+This release adds saved enrollment foreground sources and multi-model
+registration. Existing model-specific Gallery descriptors remain usable; saved
+source recordings from the source-library version can be reused without
+recapture. Descriptors alone cannot reconstruct the original point clouds.
+
+Before upgrading, commit or abandon pending enrollment reviews, close all app
+instances, and back up the complete local data directory. With the default
+configuration, the database and source files belong together:
+
+```text
+data/
+  gallery.sqlite3
+  gallery.sqlite3_enrollment_sources/
+```
+
+Updating the same checkout preserves these ignored local files. For a fresh
+checkout or another computer, copy the complete backed-up data directory before
+starting the app, and copy any custom model bundles as well. Do not overwrite a
+destination database that already contains new enrollments. For a custom Gallery
+path, preserve its matching `<database filename>_enrollment_sources/` directory.
+A `.mphgallery` export transfers descriptors only, not source recordings.
+
+Reinstall the editable package in the existing environment with
+`python -m pip install -e .`. Source-library and registration-job tables are
+initialized automatically; no manual SQL migration is required. See
+[CHANGELOG.md](CHANGELOG.md) for the release changes.
+
 ## Start the Application
 
 After installation, use any of the following:
@@ -225,6 +259,18 @@ python scripts/validate_release.py
 Gallery entries are separated by bundle ID, checkpoint SHA256, coordinate
 adapter, preprocessing profile, and clip length. Descriptors produced by
 incompatible models or preprocessing settings are not mixed.
+
+## Multi-Model Enrollment from Saved Sources
+
+After saving a foreground recording during enrollment, open **Enrollment
+sources**, select it, and choose **Register to models**. Select its passes and
+the installed target checkpoints, set T per model, and start one sequential
+encoding job. Each model gets its own compatible Gallery embeddings; the
+original recording and existing embeddings are retained. Registered passes are
+skipped. Cancellation or failure adds no partial multi-model galleries.
+
+See the [Stage C guide](docs/SOURCE_REGISTRATION.md)
+([繁體中文](docs/SOURCE_REGISTRATION_zh.md)) for window rules, safeguards, and testing.
 
 ## Identification Workflow
 

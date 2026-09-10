@@ -248,10 +248,10 @@ class GalleryManagerPage(ttk.Frame):
                     self._text("刪除人物及全部模型特徵", "Delete person and ALL model embeddings"),
                     self._scope_text(preview) + "\n\n" + self._text(
                         "跨所有模型刪除此人物及啟用／停用特徵，釋放 ID。\n"
-                        "來源、報告與權重保留；先備份。舊匯入包不會恢復此人物。\n"
+                        "來源、報告與權重保留；先備份。匯入時預設略過，明確選擇還原才能恢復。\n"
                         "請輸入完整 Person ID 確認：",
                         "Deletes this person and active/inactive embeddings across ALL models; frees the ID.\n"
-                        "Sources, reports and weights remain; a backup is made first. Old archives cannot restore this identity.\n"
+                        "Sources, reports and weights remain; a backup is made first. Import skips deleted records unless restoration is explicitly enabled.\n"
                         "Type the exact Person ID to confirm:"), parent=self,
                 )
                 if answer == person_id:
@@ -278,9 +278,9 @@ class GalleryManagerPage(ttk.Frame):
                 f"Source: {item['source_path']}\n\n"
             ) + self._text(
                 "永久刪除此列的全部特徵（含停用）？\n"
-                "保留人物、其他片段與來源檔案。先備份；舊匯入包中的已刪特徵會略過。",
+                "保留人物、其他片段與來源檔案。先備份；匯入時預設略過已刪特徵。",
                 "Permanently delete all active and inactive embeddings in this row?\n"
-                "Person, other fragments and source files remain. A backup is made first; deleted archive entries will be skipped.")
+                "Person, other fragments and source files remain. A backup is made first; deleted archive entries are skipped by default.")
             if messagebox.askyesno(self._text("永久刪除片段", "Permanently delete fragment"), prompt, parent=self):
                 self._apply_edit(preview, "delete_fragment")
         except Exception as exc:

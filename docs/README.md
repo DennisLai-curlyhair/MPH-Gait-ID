@@ -9,6 +9,8 @@ run from the repository root unless otherwise stated.
 | Interface and enrollment workflow | [UI guide](UI_GUIDE.md) | [UI guide](UI_GUIDE_zh.md) |
 | Rename people and manage registered features | [Gallery management](GALLERY_MANAGEMENT.md) | [Gallery 人物與特徵管理](GALLERY_MANAGEMENT_zh.md) |
 | Move registered features between computers | [Gallery transfer](GALLERY_TRANSFER.md) | [Gallery 匯出／匯入](GALLERY_TRANSFER_zh.md) |
+| Preserve and replay enrollment foreground XYZ | [Enrollment sources](ENROLLMENT_SOURCES.md) | [註冊前景點雲來源庫](ENROLLMENT_SOURCES_zh.md) |
+| Re-encode saved passes for several models | [Multi-model registration](SOURCE_REGISTRATION.md) | [多模型特徵註冊](SOURCE_REGISTRATION_zh.md) |
 | Architecture and system boundaries | [System design](DESIGN.md) | [System design](DESIGN_zh.md) |
 | Live efficiency measurement | [Performance benchmark](PERFORMANCE_BENCHMARK_GUIDE.md) | [Performance benchmark](PERFORMANCE_BENCHMARK_GUIDE_zh.md) |
 

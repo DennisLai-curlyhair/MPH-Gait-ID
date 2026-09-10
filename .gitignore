@@ -53,6 +53,7 @@ demo_data/
 replay_data/
 performance_benchmarks/
 live_enrollment_sessions/
+*_enrollment_sources/
 *.tmp
 *.bak
 *.orig

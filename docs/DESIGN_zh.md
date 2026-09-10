@@ -35,6 +35,22 @@ YOLO detection 以人物框選擇主要人物；YOLO-Seg 或 SAM 可取得更緊
 
 註冊人物、模型與所有來源由同一 SQLite transaction 寫入。任一來源失敗會整批 rollback，避免人物存在但特徵不完整。
 
+## 註冊來源點雲
+
+階段 B 在固定點數抽樣前分流，透過 bounded queue 保存選擇性錄製的前景 XYZ。
+Review 選取的來源索引與 embeddings 共用 SQLite transaction；檔案先準備，
+交易失敗時移除未發布副本。來源人物使用永久 transfer UID，避免 ID 重用時
+誤接舊資料。來源刪除與特徵刪除分離，也不包含於階段 A 匯出包。
+詳見[註冊來源庫](ENROLLMENT_SOURCES_zh.md)。
+
+## 跨模型來源註冊
+
+階段 C 使用獨立的 `SourceRegistrationService` 與背景多模型註冊視窗，
+把來源的連續 passes 依各目標 T 切成完整視窗，沿用既有 sampler 與 ModelAdapter。
+每個模型依序載入，沒有 embedding 跨模型轉換；新特徵在確認人物、相容性與重複
+資料後一次提交，取消或失敗不留下部分 Gallery。既有模型編碼檔案及階段 A
+使用的 encoder hash 不變。詳見[多模型特徵註冊](SOURCE_REGISTRATION_zh.md)。
+
 ## Gallery
 
 Gallery Manager 以目前 model bundle、Frame 長度和點雲處理版本顯示資料。可停用或恢復單一來源／pass，也可停用某人物在目前相容性範圍內的全部特徵。

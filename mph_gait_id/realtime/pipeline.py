@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import queue
 import threading
 import time
@@ -14,6 +15,7 @@ import torch
 
 from ..controller import GaitApplicationController
 from ..config import nested, resolve_system_path
+from ..enrollment_sources import EnrollmentSourceLibrary, ForegroundCapture
 from ..runtime import EmbeddingBatch, SystemModelRuntime
 from ..services import RecognitionService
 from .detection import (
@@ -70,6 +72,7 @@ class RealtimeConfig:
     enrollment_max_embeddings: int = 10
     enrollment_stride: int = 0
     enrollment_session_root: str = ""
+    save_enrollment_foreground: bool = False
     guided_passes: bool = True
     preprocessing_profile_id: str = "person_foreground_pointcloud_v1"
     reject_multiple_people: bool = False
@@ -283,6 +286,7 @@ class RealtimePipeline:
             warmup_s=float(self.config.enrollment_warmup_s),
             min_embeddings=int(self.config.enrollment_min_embeddings),
             max_embeddings=int(self.config.enrollment_max_embeddings),
+            save_foreground=bool(self.config.save_enrollment_foreground),
         )
 
     def _validate_config(self) -> None:
@@ -447,6 +451,11 @@ class RealtimePipeline:
             self._prepare_session_provenance()
             self._loop(detector)
         except Exception as exc:
+            if self._collector is not None and not self._committed:
+                try:
+                    self._collector.cancel_foreground()
+                except Exception:
+                    pass
             self._emit(
                 PipelineSnapshot(
                     state="error",
@@ -459,6 +468,11 @@ class RealtimePipeline:
                 )
             )
         finally:
+            if self._collector is not None and not self._review_ready and not self._committed:
+                try:
+                    self._collector.cancel_foreground()
+                except Exception:
+                    pass
             if self._source is not None:
                 try:
                     self._source.close()
@@ -499,7 +513,14 @@ class RealtimePipeline:
             self._enrollment_active_at = time.monotonic()
             return
         if self.operation == "enroll":
+            capture = None
+            if self.config.save_enrollment_foreground:
+                limits = dict(nested(self.controller.config, "realtime",
+                                     "foreground_storage", {}) or {})
+                capture = ForegroundCapture(
+                    EnrollmentSourceLibrary(self.controller.repository), **limits)
             self._collector = LiveEnrollmentCollector(
+                foreground_capture=capture,
                 request=self._enrollment_request(),
                 model_record=self._runtime.model_record,
                 source_path=self._source_path,
@@ -508,6 +529,17 @@ class RealtimePipeline:
                 session_id=self._session_id,
                 session_dir=session_dir,
                 source_metadata={
+                    "preprocessing_profile_id": self.config.preprocessing_profile_id,
+                    "filter_parameters": {
+                        "near_mm": self.config.near_mm, "far_mm": self.config.far_mm,
+                        "depth_margin_mm": self.config.depth_margin_mm,
+                        "min_person_points": self.config.min_person_points,
+                        "max_valid_frame_gap_s": self.config.max_valid_frame_gap_s,
+                    },
+                    "preprocessing_source_sha256": hashlib.sha256(
+                        Path(__file__).with_name("preprocessing.py").read_bytes()).hexdigest(),
+                    "detector_confidence": self.config.detector_confidence,
+                    "yolo_image_size": self.config.yolo_image_size,
                     "source_type": self.config.source_mode,
                     "foreground_detector": self.config.detector,
                     "yolo_weights": self.config.yolo_weights,
@@ -770,6 +802,7 @@ class RealtimePipeline:
                     self.config.max_valid_frame_gap_s
                 ):
                     self._clear_sequence_state(clear_results=True)
+            segment_start = not self._sampled_frames
             self._sampled_frames.append(prepared.sampled_points_mm)
             self._sampled_timestamps.append(float(frame.timestamp))
             self._sampled_frame_indices.append(int(frame.index))
@@ -779,6 +812,16 @@ class RealtimePipeline:
                 and self._collector is not None
                 and self._collector.active_pass_id is not None
             ):
+                self._collector.add_foreground(
+                    prepared.foreground_points_mm, frame_index=int(frame.index),
+                    timestamp=float(frame.timestamp), segment_start=segment_start,
+                    metadata={
+                        "sensor": frame.metadata,
+                        "color_aligned": bool(frame.point_cloud_color_aligned),
+                        "quality": prepared.diagnostics,
+                        "selection": self._selection_diagnostics(detection),
+                        "detection_confidence": float(detection.confidence),
+                    })
                 self._pass_frame_count += 1
                 self._pass_point_total += int(len(prepared.foreground_points_mm))
                 center_x = float(np.median(prepared.foreground_points_mm[:, 0]))
@@ -1176,6 +1219,7 @@ class RealtimePipeline:
                 elapsed_s=elapsed,
             )
             state = "enrolled"
+            self._committed = True
             message = (
                 f"Enrollment complete: {result['display_name']} | "
                 f"stored {result['stored_embeddings']} embeddings"

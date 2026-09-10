@@ -92,6 +92,27 @@ passes are written only after review and confirmation. Person, model, and
 source records are committed in one SQLite transaction. A failure in any source
 rolls back the batch to avoid partially registered identities.
 
+## Foreground Source Library
+
+Stage B branches before fixed-point sampling and preserves opt-in foreground XYZ
+using a bounded background writer. Review-selected sources and their Gallery
+embeddings share one SQLite commit; files are prepared beforehand and failed
+transactions remove unpublished files. Source owners use transfer UIDs so Person
+ID reuse cannot reassign recordings. Source deletion is independent of embedding
+deletion, and source recordings are not included in Stage A transfer archives.
+See [Enrollment sources](ENROLLMENT_SOURCES.md) for schema, storage and recovery.
+
+## Source Re-Registration
+
+Stage C adds a separate `SourceRegistrationService` and a background multi-model
+dialog. It reads verified source frames, partitions uninterrupted passes into
+target-specific windows, and calls the unchanged point sampler and model adapter.
+Targets are loaded sequentially; no model-to-model descriptor conversion occurs.
+All new descriptors commit in one transaction after ownership, compatibility,
+and duplicate checks. Failed/cancelled jobs add no partial galleries.
+The encoder files and their Stage A compatibility hash remain unchanged.
+See [Multi-model registration](SOURCE_REGISTRATION.md) for rules and tests.
+
 ## Gallery Management
 
 Gallery Manager filters records by the current model bundle, frame length, and

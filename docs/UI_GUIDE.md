@@ -14,6 +14,7 @@ English and Traditional Chinese. The control names below refer to English.
 | Real-time | Connect Azure Kinect DK, preview foreground points, enroll walking passes, and identify people. |
 | Gallery Manager | Inspect and manage registered people, sessions, passes, and sources. |
 | Live Performance Benchmark | Measure pipeline and model efficiency using Kinect; save numerical reports without previews. |
+| Enrollment sources | Replay/delete foreground recordings or [register selected passes to several models](SOURCE_REGISTRATION.md). |
 
 **Open Offline batch** continues the offline workflow. Gallery maintenance is
 handled in Gallery Manager rather than mixed into live capture controls.
