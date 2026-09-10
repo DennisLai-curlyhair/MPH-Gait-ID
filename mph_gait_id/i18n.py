@@ -62,6 +62,15 @@ MESSAGES: dict[str, dict[str, str]] = {
     "gallery.processing_version": {"zh_TW": "點雲處理版本", "en": "Point-cloud processing version"},
     "gallery.deactivate_pass": {"zh_TW": "停用選取 pass", "en": "Deactivate selected pass"},
     "gallery.reactivate_pass": {"zh_TW": "恢復選取 pass", "en": "Reactivate selected pass"},
+    "gallery.rename_person": {"zh_TW": "修改人物名稱（所有模型）", "en": "Rename person (all models)"},
+    "gallery.delete_person": {"zh_TW": "刪除人物及全部模型特徵", "en": "Delete person and ALL model embeddings"},
+    "gallery.delete_fragment": {"zh_TW": "永久刪除選取片段", "en": "Permanently delete selected fragment"},
+    "gallery.all_people": {"zh_TW": "顯示所有人物（跨模型，含無特徵者）", "en": "All people (all models, including empty entries)"},
+    "gallery.delete_scope_hint": {"zh_TW": "刪除範圍：選取列的全部特徵", "en": "Deletion scope: all embeddings in the selected row"},
+    "gallery.finish_before_edit": {
+        "zh_TW": "請先完成或放棄待檢查的註冊片段，再修改或匯出／匯入 Gallery。",
+        "en": "Commit or abandon the pending enrollment review before editing or transferring Gallery.",
+    },
     "realtime.operation": {"zh_TW": "即時操作", "en": "Realtime operation"},
     "realtime.recognition": {"zh_TW": "即時辨識", "en": "Realtime recognition"},
     "realtime.enrollment": {"zh_TW": "即時註冊", "en": "Realtime enrollment"},
@@ -156,16 +165,16 @@ MESSAGES: dict[str, dict[str, str]] = {
     "gallery.embedding_count": {"zh_TW": "Clip 特徵數", "en": "Clip embeddings"},
     "gallery.disable_source": {"zh_TW": "停用選取來源", "en": "Deactivate selected source"},
     "gallery.clear_model": {
-        "zh_TW": "清除該人物於目前權重的全部特徵",
-        "en": "Delete all embeddings for this identity and current checkpoint",
+        "zh_TW": "停用該人物於目前權重的全部特徵",
+        "en": "Deactivate this identity's embeddings for the current checkpoint",
     },
     "gallery.description": {
-        "zh_TW": "檢視已註冊人物，並停用或恢復個別引導式 pass。",
-        "en": "View registered identities and enable or disable individual guided passes.",
+        "zh_TW": "人物、註冊片段與資料移轉",
+        "en": "Identities, enrollment fragments and data transfer",
     },
     "gallery.legacy": {
-        "zh_TW": "沒有 session／pass ID 的舊資料只能檢視。",
-        "en": "Legacy rows without session/pass IDs are view-only.",
+        "zh_TW": "舊資料可依來源列永久刪除；啟停 pass 需要 session／pass ID。",
+        "en": "Legacy rows can be deleted by source; pass activation requires session/pass IDs.",
     },
     "realtime.session_timing": {
         "zh_TW": "最長 session／pass 暖身（秒）",

@@ -23,6 +23,8 @@ outputs/*
 !outputs/.gitkeep
 *.sqlite
 *.sqlite3
+*.mphgallery
+gallery_transfer/
 *.db
 *.log
 

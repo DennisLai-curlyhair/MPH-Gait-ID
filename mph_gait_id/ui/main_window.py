@@ -242,6 +242,8 @@ class GaitIdentityWindow:
             self.gallery_page_host,
             self.controller,
             on_changed=self._gallery_changed,
+            transfer_available=self._gallery_transfer_available,
+            can_edit=self._gallery_transfer_available,
         )
         self.gallery_page.grid(row=0, column=0, sticky="nsew")
         self.realtime_page = RealtimePage(
@@ -300,6 +302,19 @@ class GaitIdentityWindow:
         pipeline = getattr(realtime, "pipeline", None)
         if pipeline is not None and pipeline.running:
             return False, "請先停止即時辨識／註冊，再開始效率測試。"
+        return True, ""
+
+    def _gallery_transfer_available(self) -> tuple[bool, str]:
+        running = self.worker.busy
+        for name in ("realtime_page", "performance_page"):
+            pipeline = getattr(getattr(self, name, None), "pipeline", None)
+            running = running or (pipeline is not None and pipeline.running)
+        pending = getattr(getattr(self, "realtime_page", None), "_pending_review_result", None)
+        if pending is not None:
+            return False, self.i18n.tr("gallery.finish_before_edit")
+        if running:
+            return False, ("請先停止辨識、註冊與效能測試。" if self.i18n.locale == "zh_TW"
+                           else "Stop recognition, enrollment and benchmarking first.")
         return True, ""
 
     def _gallery_changed(self) -> None:
@@ -1323,6 +1338,10 @@ class GaitIdentityWindow:
             )
 
     def _manage_selected_gallery(self) -> None:
+        allowed, reason = self._gallery_transfer_available()
+        if not allowed:
+            messagebox.showwarning("Gallery", reason, parent=self.root)
+            return
         selected = self.person_tree.selection()
         if not selected:
             messagebox.showinfo(
@@ -1458,7 +1477,7 @@ class GaitIdentityWindow:
 
         def deactivate_person() -> None:
             if not messagebox.askyesno(
-                "清除目前權重下的人物特徵",
+                "停用目前權重下的人物特徵",
                 f"將停用 {display_name} 在「{bundle.display_name}」下的全部特徵。"
                 "其他模型的 Gallery 不受影響。是否繼續？",
                 parent=dialog,
@@ -1483,7 +1502,7 @@ class GaitIdentityWindow:
         ).grid(row=0, column=1, padx=(8, 0))
         ttk.Button(
             actions,
-            text="清除該人物於目前權重的全部特徵",
+            text=self.i18n.tr("gallery.clear_model"),
             command=deactivate_person,
         ).grid(row=0, column=2, padx=(8, 0))
         ttk.Button(
@@ -1563,6 +1582,10 @@ class GaitIdentityWindow:
             tree.delete(*children)
 
     def _close(self) -> None:
+        dialog = getattr(getattr(self, "gallery_page", None), "transfer_dialog", None)
+        if dialog is not None and dialog.winfo_exists() and dialog.worker.busy:
+            dialog.close()
+            return
         if hasattr(self, "realtime_page"):
             self.realtime_page.close()
         if hasattr(self, "performance_page"):

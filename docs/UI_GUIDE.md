@@ -17,6 +17,14 @@ English and Traditional Chinese. The control names below refer to English.
 
 **Open Offline batch** continues the offline workflow. Gallery maintenance is
 handled in Gallery Manager rather than mixed into live capture controls.
+For moving registered features to another computer, use **Export all Gallery**
+and **Import Gallery** on that page. See [Gallery transfer](GALLERY_TRANSFER.md)
+for compatibility, identity conflicts, and backup behavior.
+
+Gallery Manager also supports **Rename person (all models)**, **Permanently
+delete selected fragment**, and **Delete person and ALL model embeddings**.
+These are separate from pass deactivation. See [Gallery management](GALLERY_MANAGEMENT.md)
+for exact deletion scopes, pre-edit backups and Person ID reuse.
 
 ## Live Preview
 

@@ -629,7 +629,8 @@ class GalleryRepository:
                     {active_filter}
                 GROUP BY
                     e.person_id, e.model_key, e.source_path,
-                    e.session_id, e.pass_id, e.direction
+                    COALESCE(e.session_id, ''), COALESCE(e.pass_id, ''),
+                    COALESCE(e.direction, 'legacy_or_unknown')
                 ORDER BY created_at DESC, e.session_id, e.pass_id
                 """,
                 [person_id.strip(), *selected_keys],

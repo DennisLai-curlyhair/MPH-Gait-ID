@@ -149,6 +149,7 @@ class RegistrationService:
         ):
             raise ValueError(
                 f"Person ID {person_id} 已登記為「{existing_person['display_name']}」。"
+                "若為同一人，請到 Gallery 管理 → 修改人物名稱，再重新註冊。"
                 "同一人物不可因服裝不同而使用不同顯示名稱。"
             )
 

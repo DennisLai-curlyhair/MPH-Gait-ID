@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from ..controller import GaitApplicationController
 from ..i18n import I18n
+from .gallery_transfer import GalleryTransferDialog
 
 
 class GalleryManagerPage(ttk.Frame):
@@ -17,12 +18,18 @@ class GalleryManagerPage(ttk.Frame):
         master: tk.Misc,
         controller: GaitApplicationController,
         on_changed: Callable[[], None] | None = None,
+        transfer_available: Callable[[], tuple[bool, str]] | None = None,
+        can_edit: Callable[[], tuple[bool, str]] | None = None,
     ) -> None:
         super().__init__(master, padding=14)
         self.controller = controller
         shared_i18n = getattr(self.winfo_toplevel(), "_gait_i18n", None)
         self.i18n: I18n = shared_i18n if isinstance(shared_i18n, I18n) else I18n("en")
         self.on_changed = on_changed
+        self.transfer_available = transfer_available
+        self.can_edit = can_edit or transfer_available
+        self.show_all_people = tk.BooleanVar(value=False)
+        self.transfer_dialog: GalleryTransferDialog | None = None
         self.bundle_var = tk.StringVar()
         self.clip_len_var = tk.IntVar(value=15)
         self.processing_version_var = tk.StringVar()
@@ -40,12 +47,18 @@ class GalleryManagerPage(ttk.Frame):
         header = ttk.Frame(self)
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
+        self.export_button = ttk.Button(header, text="Export all Gallery",
+                                        command=lambda: self._transfer("export"))
+        self.export_button.grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self.import_button = ttk.Button(header, text="Import Gallery",
+                                        command=lambda: self._transfer("import"))
+        self.import_button.grid(row=2, column=1, sticky="e", pady=(8, 0))
         ttk.Label(header, text="Gallery Manager", style="Header.TLabel").grid(
             row=0, column=0, sticky="w"
         )
         ttk.Label(
             header,
-            text="View registered identities and enable or disable individual guided passes.",
+            text="gallery.description",
         ).grid(row=1, column=0, sticky="w", pady=(3, 0))
 
         filters = ttk.LabelFrame(self, text="Gallery scope", padding=10)
@@ -110,12 +123,22 @@ class GalleryManagerPage(ttk.Frame):
             ("note", "Note", 180),
         ):
             self.person_tree.heading(column, text=heading)
-            self.person_tree.column(column, width=width, anchor="w")
+            self.person_tree.column(column, width=width, minwidth=width, stretch=False, anchor="w")
         person_scroll = ttk.Scrollbar(persons_group, command=self.person_tree.yview)
-        self.person_tree.configure(yscrollcommand=person_scroll.set)
+        person_hscroll = ttk.Scrollbar(persons_group, orient="horizontal", command=self.person_tree.xview)
+        self.person_tree.configure(yscrollcommand=person_scroll.set, xscrollcommand=person_hscroll.set)
         self.person_tree.grid(row=0, column=0, sticky="nsew")
         person_scroll.grid(row=0, column=1, sticky="ns")
+        person_hscroll.grid(row=1, column=0, sticky="ew")
         self.person_tree.bind("<<TreeviewSelect>>", lambda _event: self._load_passes())
+        ttk.Checkbutton(persons_group, text="gallery.all_people", variable=self.show_all_people,
+                        command=self.refresh).grid(row=2, column=0, columnspan=2, sticky="w")
+        ttk.Button(persons_group, text="gallery.rename_person",
+                   command=lambda: self._edit_person("rename")).grid(
+                       row=3, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(persons_group, text="gallery.delete_person",
+                   command=lambda: self._edit_person("delete_person")).grid(
+                       row=4, column=0, columnspan=2, sticky="ew")
 
         passes_group.columnconfigure(0, weight=1)
         passes_group.rowconfigure(1, weight=1)
@@ -124,13 +147,14 @@ class GalleryManagerPage(ttk.Frame):
         )
         self.pass_tree = ttk.Treeview(
             passes_group,
-            columns=("session", "pass", "direction", "active", "quality", "created", "model"),
+            columns=("session", "pass", "source", "direction", "active", "quality", "created", "model"),
             show="headings",
             selectmode="browse",
         )
         for column, heading, width in (
             ("session", "Session", 155),
             ("pass", "Pass", 80),
+            ("source", "Enrollment source", 220),
             ("direction", "Direction", 125),
             ("active", "Active / total", 95),
             ("quality", "Quality", 70),
@@ -138,34 +162,153 @@ class GalleryManagerPage(ttk.Frame):
             ("model", "Model key", 180),
         ):
             self.pass_tree.heading(column, text=heading)
-            self.pass_tree.column(column, width=width, anchor="w")
+            self.pass_tree.column(column, width=width, minwidth=width, stretch=False, anchor="w")
         pass_scroll = ttk.Scrollbar(passes_group, command=self.pass_tree.yview)
-        self.pass_tree.configure(yscrollcommand=pass_scroll.set)
+        pass_hscroll = ttk.Scrollbar(passes_group, orient="horizontal", command=self.pass_tree.xview)
+        self.pass_tree.configure(yscrollcommand=pass_scroll.set, xscrollcommand=pass_hscroll.set)
         self.pass_tree.grid(row=1, column=0, sticky="nsew")
         pass_scroll.grid(row=1, column=1, sticky="ns")
+        pass_hscroll.grid(row=2, column=0, sticky="ew")
 
         actions = ttk.Frame(passes_group)
-        actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(9, 0))
+        actions.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(9, 0))
         actions.columnconfigure(0, weight=1)
+        actions.columnconfigure(1, weight=1)
         ttk.Label(
             actions,
-            text="Legacy rows without session/pass IDs are view-only.",
-        ).grid(row=0, column=0, sticky="w")
+            text="gallery.delete_scope_hint",
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
         ttk.Button(
             actions,
             text="Deactivate selected pass",
             command=lambda: self._set_selected_pass_active(False),
-        ).grid(row=0, column=1, padx=(8, 0))
+        ).grid(row=1, column=0, sticky="ew", pady=4)
         ttk.Button(
             actions,
             text="Reactivate selected pass",
             command=lambda: self._set_selected_pass_active(True),
-        ).grid(row=0, column=2, padx=(8, 0))
+        ).grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=4)
+        ttk.Button(actions, text="gallery.delete_fragment", command=self._delete_fragment).grid(
+            row=2, column=0, columnspan=2, sticky="ew")
+
+    def _text(self, zh: str, en: str) -> str:
+        return zh if self.i18n.locale == "zh_TW" else en
+
+    def _edit_allowed(self) -> bool:
+        if self.can_edit:
+            allowed, reason = self.can_edit()
+            if not allowed:
+                messagebox.showwarning(self._text("暫時無法修改", "Edit unavailable"), reason, parent=self)
+                return False
+        return True
+
+    def _scope_text(self, preview: dict) -> str:
+        return (
+            f"{preview['person_id']} / {preview['display_name']}\n"
+            + self._text("啟用／停用／總特徵數", "Active / inactive / total embeddings")
+            + f": {preview['active']} / {preview['inactive']} / {preview['total']}\n"
+            + self._text("模型版本數", "Model versions") + f": {len(preview['models'])}\n"
+            + "\n".join(preview["models"])
+        )
+
+    def _apply_edit(self, preview: dict, action: str, new_name: str = "") -> None:
+        if not self._edit_allowed():
+            return
+        result = self.controller.apply_person_edit(preview, action, new_name)
+        if action == "delete_fragment":
+            self.show_all_people.set(True)
+        self.refresh()
+        if self.on_changed:
+            self.on_changed()
+        detail = self._text("已修改人物名稱。", "Person renamed.") if action == "rename" else (
+            self._text("已刪除特徵數", "Deleted embeddings") + f": {result['deleted_embeddings']}"
+        )
+        messagebox.showinfo(self._text("Gallery 已更新", "Gallery updated"),
+            detail + "\n\n" + self._text("修改前資料庫備份：", "Pre-edit database backup:")
+            + "\n" + result["backup_path"], parent=self)
+
+    def _edit_person(self, action: str) -> None:
+        person_id = self._selected_person_id()
+        if not person_id or not self._edit_allowed():
+            return
+        try:
+            preview = self.controller.preview_person_edit(person_id)
+            if action == "rename":
+                name = simpledialog.askstring(
+                    self._text("修改人物名稱", "Rename person"),
+                    self._scope_text(preview) + "\n\n" + self._text(
+                        "名稱套用至所有模型；ID 與特徵保留。新名稱：",
+                        "Name applies to all models; ID and embeddings remain. New name:"),
+                    initialvalue=preview["display_name"], parent=self,
+                )
+                if name is not None and name.strip() != preview["display_name"]:
+                    self._apply_edit(preview, action, name)
+            elif action == "delete_person":
+                answer = simpledialog.askstring(
+                    self._text("刪除人物及全部模型特徵", "Delete person and ALL model embeddings"),
+                    self._scope_text(preview) + "\n\n" + self._text(
+                        "跨所有模型刪除此人物及啟用／停用特徵，釋放 ID。\n"
+                        "來源、報告與權重保留；先備份。舊匯入包不會恢復此人物。\n"
+                        "請輸入完整 Person ID 確認：",
+                        "Deletes this person and active/inactive embeddings across ALL models; frees the ID.\n"
+                        "Sources, reports and weights remain; a backup is made first. Old archives cannot restore this identity.\n"
+                        "Type the exact Person ID to confirm:"), parent=self,
+                )
+                if answer == person_id:
+                    self._apply_edit(preview, action)
+                elif answer is not None:
+                    messagebox.showinfo("Gallery", self._text(
+                        "ID 不符，已取消刪除。", "ID mismatch; deletion cancelled."), parent=self)
+        except Exception as exc:
+            messagebox.showerror("Gallery", str(exc), parent=self)
+
+    def _delete_fragment(self) -> None:
+        selection = self.pass_tree.selection()
+        person_id, bundle_id = self._selected_person_id(), self._bundle_id()
+        if not selection or not person_id or not bundle_id or not self._edit_allowed():
+            return
+        item = self._pass_rows.get(str(selection[0]))
+        if item is None:
+            return
+        try:
+            preview = self.controller.preview_fragment_delete(
+                bundle_id, person_id, item, int(self.clip_len_var.get()))
+            prompt = self._scope_text(preview) + (
+                f"\nSession: {item['session_id']}\nPass: {item['pass_id']}\n"
+                f"Source: {item['source_path']}\n\n"
+            ) + self._text(
+                "永久刪除此列的全部特徵（含停用）？\n"
+                "保留人物、其他片段與來源檔案。先備份；舊匯入包中的已刪特徵會略過。",
+                "Permanently delete all active and inactive embeddings in this row?\n"
+                "Person, other fragments and source files remain. A backup is made first; deleted archive entries will be skipped.")
+            if messagebox.askyesno(self._text("永久刪除片段", "Permanently delete fragment"), prompt, parent=self):
+                self._apply_edit(preview, "delete_fragment")
+        except Exception as exc:
+            messagebox.showerror("Gallery", str(exc), parent=self)
 
     def _bundle_id(self) -> str | None:
         return self.bundle_labels.get(self.bundle_var.get())
 
+    def _transfer(self, operation: str) -> None:
+        if self.transfer_dialog is not None and self.transfer_dialog.winfo_exists():
+            self.transfer_dialog.lift()
+            return
+        if self.transfer_available:
+            allowed, reason = self.transfer_available()
+            if not allowed:
+                messagebox.showwarning("Gallery", reason, parent=self)
+                return
+        def changed() -> None:
+            self.refresh_bundles()
+            if self.on_changed:
+                self.on_changed()
+        self.transfer_dialog = GalleryTransferDialog(
+            self, self.controller, operation, self.i18n.locale, changed,
+        )
+
     def set_locale(self, locale_name: str) -> None:
+        self.export_button.configure(text="匯出全部 Gallery" if locale_name == "zh_TW" else "Export all Gallery")
+        self.import_button.configure(text="匯入 Gallery" if locale_name == "zh_TW" else "Import Gallery")
         display = self.controller.processing_version_name(locale_name)
         self.processing_version_combo.configure(values=[display])
         self.processing_version_var.set(display)
@@ -216,8 +359,8 @@ class GalleryManagerPage(ttk.Frame):
         if children:
             self.person_tree.delete(*children)
         for person in self.controller.list_persons(
-            bundle_id,
-            clip_len=clip_len,
+            None if self.show_all_people.get() else bundle_id,
+            clip_len=None if self.show_all_people.get() else clip_len,
             include_inactive=True,
         ):
             person_id = str(person.get("person_id", ""))
@@ -280,6 +423,7 @@ class GalleryManagerPage(ttk.Frame):
                 values=(
                     item.get("session_id") or "legacy",
                     item.get("pass_id") or "legacy source",
+                    item.get("source_path", ""),
                     str(item.get("direction") or "unknown").replace("_", " "),
                     f"{active} / {total}",
                     "-" if quality is None else f"{float(quality):.3f}",
@@ -289,6 +433,8 @@ class GalleryManagerPage(ttk.Frame):
             )
 
     def _set_selected_pass_active(self, active: bool) -> None:
+        if not self._edit_allowed():
+            return
         selection = self.pass_tree.selection()
         if not selection:
             messagebox.showinfo("Select a pass", "Select one pass first.", parent=self)
@@ -303,7 +449,9 @@ class GalleryManagerPage(ttk.Frame):
         if not session_id or not pass_id:
             messagebox.showinfo(
                 "Legacy Gallery row",
-                "This enrollment predates pass metadata and can only be managed at source/person level on the Offline page.",
+                self._text(
+                    "此片段沒有 session／pass ID，可永久刪除選取片段，或到離線頁停用來源。",
+                    "This row has no session/pass IDs. Delete the selected fragment here, or deactivate its source on the Offline page."),
                 parent=self,
             )
             return

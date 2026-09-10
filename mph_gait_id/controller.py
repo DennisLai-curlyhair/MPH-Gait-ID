@@ -10,6 +10,8 @@ from typing import Any, Callable, Sequence
 
 from .config import DEFAULT_CONFIG_PATH, load_config, nested, resolve_system_path
 from .database import GalleryRepository
+from .gallery_lifecycle import GalleryLifecycle
+from .gallery_transfer import GalleryTransfer
 from .model_store import ModelBundle, ModelStore
 from .runtime import EmbeddingBatch, SystemModelRuntime
 from .services import RecognitionService, RegistrationService
@@ -109,6 +111,23 @@ class GaitApplicationController:
     def get_person(self, person_id: str) -> dict[str, Any] | None:
         return self.repository.get_person(person_id)
 
+    def preview_person_edit(self, person_id: str) -> dict[str, Any]:
+        return GalleryLifecycle(self.repository).preview(person_id)
+
+    def preview_fragment_delete(
+        self, bundle_id: str, person_id: str, fragment: dict[str, Any], clip_len: int,
+    ) -> dict[str, Any]:
+        if (fragment.get("person_id") != person_id
+                or fragment.get("model_key") not in self._compatible_model_keys(bundle_id, clip_len)):
+            raise ValueError("Selected fragment does not belong to this person/model scope")
+        selector = {key: fragment[key] for key in (
+            "model_key", "source_path", "session_id", "pass_id", "direction"
+        )}
+        return GalleryLifecycle(self.repository).preview(person_id, selector)
+
+    def apply_person_edit(self, preview: dict[str, Any], action: str, new_name: str = "") -> dict:
+        return GalleryLifecycle(self.repository).apply(preview, action, new_name)
+
     def list_gallery_sources(
         self,
         bundle_id: str,
@@ -181,6 +200,22 @@ class GaitApplicationController:
         self.model_store.get(bundle_id)
         model_keys = self._compatible_model_keys(bundle_id)
         return self.repository.deactivate_person_embeddings(person_id, model_keys)
+
+    def gallery_transfer(self) -> GalleryTransfer:
+        return GalleryTransfer(self.repository, self.model_store, self.processing_version_id())
+
+    def export_gallery(self, path: str | Path) -> dict[str, Any]:
+        return self.gallery_transfer().export(path)
+
+    def preview_gallery_import(self, path: str | Path) -> dict[str, Any]:
+        return self.gallery_transfer().preview(path)
+
+    def import_gallery(
+        self, path: str | Path, preview: dict[str, Any],
+        person_map: dict[str, str | None], *, restore_deleted: bool = False,
+    ) -> dict[str, Any]:
+        return self.gallery_transfer().import_archive(
+            path, preview, person_map, restore_deleted=restore_deleted)
 
     def processing_version_id(self) -> str:
         return str(
