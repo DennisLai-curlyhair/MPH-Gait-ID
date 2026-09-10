@@ -35,6 +35,8 @@ and upstream sources.
 - [Opt-in enrollment foreground source recording](docs/ENROLLMENT_SOURCES.md),
   pass-level review, playback, storage limits, and independent source deletion
   ([繁體中文](docs/ENROLLMENT_SOURCES_zh.md)).
+- [Multi-model registration from saved foreground sources](docs/SOURCE_REGISTRATION.md),
+  with per-model window lengths, progress, cancellation, and atomic Gallery writes.
 - Rank-based identity matching with configurable unknown-score, margin, and
   temporal-stability thresholds.
 - RGB, foreground point-cloud, FPS, predicted identity, and similarity displays.
@@ -228,6 +230,18 @@ python scripts/validate_release.py
 Gallery entries are separated by bundle ID, checkpoint SHA256, coordinate
 adapter, preprocessing profile, and clip length. Descriptors produced by
 incompatible models or preprocessing settings are not mixed.
+
+## Multi-Model Enrollment from Saved Sources
+
+After saving a foreground recording during enrollment, open **Enrollment
+sources**, select it, and choose **Register to models**. Select its passes and
+the installed target checkpoints, set T per model, and start one sequential
+encoding job. Each model gets its own compatible Gallery embeddings; the
+original recording and existing embeddings are retained. Registered passes are
+skipped. Cancellation or failure adds no partial multi-model galleries.
+
+See the [Stage C guide](docs/SOURCE_REGISTRATION.md)
+([繁體中文](docs/SOURCE_REGISTRATION_zh.md)) for window rules, safeguards, and testing.
 
 ## Identification Workflow
 

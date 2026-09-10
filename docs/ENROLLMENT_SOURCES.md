@@ -1,9 +1,9 @@
 # Enrollment Foreground Source Library
 
-Stage B preserves enrollment foreground point clouds for inspection and future
-re-encoding. It does not implement cross-model registration. Stage A Gallery
-transfer remains descriptor-only: `.mphgallery` archives do not include these
-recordings.
+Stage B preserves enrollment foreground point clouds for inspection and reuse.
+[Stage C](SOURCE_REGISTRATION.md) registers selected passes to several installed
+models in one job. Stage A Gallery transfer remains descriptor-only:
+`.mphgallery` archives do not include these recordings.
 
 ## Capture and Review
 

@@ -13,8 +13,14 @@ from .workers import BackgroundWorker
 
 
 class EnrollmentSourcesPage(ttk.Frame):
-    def __init__(self, master, controller, can_edit: Callable[[], tuple[bool, str]]) -> None:
+    def __init__(self, master, controller, can_edit: Callable[[], tuple[bool, str]],
+                 on_gallery_changed: Callable[[], None] | None = None,
+                 prepare_encoding: Callable[[], None] | None = None) -> None:
         super().__init__(master, padding=10)
+        self.controller = controller
+        self.on_gallery_changed = on_gallery_changed or (lambda: None)
+        self.prepare_encoding = prepare_encoding or (lambda: None)
+        self.registration_dialog = None
         self.library = EnrollmentSourceLibrary(controller.repository)
         self.can_edit = can_edit
         self.i18n = getattr(self.winfo_toplevel(), "_gait_i18n", I18n("en"))
@@ -38,6 +44,7 @@ class EnrollmentSourcesPage(ttk.Frame):
             ("重新整理", "Refresh", self.refresh),
             ("刪除選取來源", "Delete source", self._delete),
             ("清理未提交暫存", "Clean uncommitted files", self._cleanup),
+            ("多模型特徵註冊", "Register to models", self._register),
         ]):
             button = ttk.Button(toolbar, command=command)
             button.grid(row=0, column=i, padx=4)
@@ -204,6 +211,30 @@ class EnrollmentSourcesPage(ttk.Frame):
         self.index += 1
         self.seek.set(self.index)
         self._schedule()
+
+    @property
+    def busy(self):
+        return self.worker.busy or bool(
+            self.registration_dialog is not None and self.registration_dialog.running)
+
+    def _register(self):
+        if self.registration_dialog is not None and self.registration_dialog.winfo_exists():
+            self.registration_dialog.lift()
+            return
+        allowed, reason = self.can_edit()
+        if not allowed or self.busy:
+            messagebox.showwarning(self._t("暫時無法操作", "Unavailable"), reason or "Operation in progress", parent=self)
+            return
+        if self.source_id is None:
+            messagebox.showinfo(self._t("選取來源", "Select source"),
+                               self._t("請先選取一筆註冊來源。", "Select an enrollment source first."), parent=self)
+            return
+        try:
+            from .source_registration import SourceRegistrationDialog
+            self.pause()
+            self.registration_dialog = SourceRegistrationDialog(self)
+        except Exception as exc:
+            messagebox.showerror(self._t("操作失敗", "Operation failed"), str(exc), parent=self)
 
     def _mutate(self, task, question):
         allowed, reason = self.can_edit()

@@ -13,6 +13,7 @@ class TransferUiGuardTest(unittest.TestCase):
     def test_live_or_offline_work_blocks_transfer(self):
         host = SimpleNamespace(worker=SimpleNamespace(busy=False),
                                i18n=SimpleNamespace(locale="en"))
+        host._source_operation_running = lambda: GaitIdentityWindow._source_operation_running(host)
         self.assertTrue(GaitIdentityWindow._gallery_transfer_available(host)[0])
         host.worker.busy = True
         self.assertFalse(GaitIdentityWindow._gallery_transfer_available(host)[0])

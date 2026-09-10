@@ -102,6 +102,17 @@ ID reuse cannot reassign recordings. Source deletion is independent of embedding
 deletion, and source recordings are not included in Stage A transfer archives.
 See [Enrollment sources](ENROLLMENT_SOURCES.md) for schema, storage and recovery.
 
+## Source Re-Registration
+
+Stage C adds a separate `SourceRegistrationService` and a background multi-model
+dialog. It reads verified source frames, partitions uninterrupted passes into
+target-specific windows, and calls the unchanged point sampler and model adapter.
+Targets are loaded sequentially; no model-to-model descriptor conversion occurs.
+All new descriptors commit in one transaction after ownership, compatibility,
+and duplicate checks. Failed/cancelled jobs add no partial galleries.
+The encoder files and their Stage A compatibility hash remain unchanged.
+See [Multi-model registration](SOURCE_REGISTRATION.md) for rules and tests.
+
 ## Gallery Management
 
 Gallery Manager filters records by the current model bundle, frame length, and

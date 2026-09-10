@@ -266,11 +266,14 @@ class GalleryEditGuardTest(unittest.TestCase):
             performance_page=SimpleNamespace(pipeline=SimpleNamespace(running=False)),
             worker=SimpleNamespace(busy=False), i18n=SimpleNamespace(locale="en", tr=lambda key: key),
         )
+        window.sources_page = SimpleNamespace(busy=False)
+        window._source_operation_running = lambda: GaitIdentityWindow._source_operation_running(window)
         self.assertTrue(GaitIdentityWindow._gallery_transfer_available(window)[0])
         for target, key, value in (
             (window.realtime_page.pipeline, "running", True),
             (window.performance_page.pipeline, "running", True),
             (window.worker, "busy", True),
+            (window.sources_page, "busy", True),
             (window.realtime_page, "_pending_review_result", {}),
         ):
             old = getattr(target, key)

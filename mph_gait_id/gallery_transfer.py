@@ -18,7 +18,7 @@ from collections import Counter
 from .database import GalleryRepository, _utc_now
 from .gallery_provenance import initialize_provenance, is_deleted, portable_uid, restore_record
 from .model_record import build_model_record
-from .model_store import ModelBundle, ModelStore
+from .model_store import ModelBundle, ModelStore, descriptor_dimension
 
 
 FORMAT = "mph-gait-gallery"
@@ -280,7 +280,8 @@ class GalleryTransfer:
                 if spec is None or spec != _bundle_spec(bundle):
                     continue
                 record = build_model_record(bundle, self.store, source["compatibility"]["clip_len"],
-                                            source["compatibility"]["drop_first_frames"], self.profile_id)
+                                            source["compatibility"]["drop_first_frames"], self.profile_id,
+                                            embedding_dim=descriptor_dimension(bundle))
                 if _space(record) != _space(source):
                     continue
                 if bundle.bundle_id not in verified:

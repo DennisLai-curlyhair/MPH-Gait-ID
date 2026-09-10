@@ -6,7 +6,7 @@
 - 「即時」：連接 Azure Kinect，執行偵測、人體點雲預覽、引導式註冊與辨識。
 - 「Gallery 管理」：直接查看與管理註冊人物、sessions、passes 與來源。
 - 「即時效率測試」：直接以 Kinect 比較完整 pipeline 與不同點雲模型的效率，只保存數值報告。
-- 「註冊來源點雲」：回放、刪除選擇性保存的前景 XYZ，詳見[來源庫指南](ENROLLMENT_SOURCES_zh.md)。
+- 「註冊來源點雲」：回放、刪除前景 XYZ，或[一鍵替多個模型註冊來源特徵](SOURCE_REGISTRATION_zh.md)。錄製流程見[來源庫指南](ENROLLMENT_SOURCES_zh.md)。
 
 離線頁的「開啟離線批次」會留在離線工作；註冊名單與資料管理集中在 Gallery 管理頁，避免即時操作和資料維護混在一起。
 跨電腦搬移已註冊特徵時，使用該頁的「匯出全部 Gallery」與「匯入 Gallery」。
