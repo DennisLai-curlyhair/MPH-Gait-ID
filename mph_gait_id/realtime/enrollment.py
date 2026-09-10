@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 
 from ..database import GalleryRepository
+from ..enrollment_sources import ForegroundCapture
 from ..runtime import EmbeddingBatch
 from ..services import RegistrationService
 from ..source_fingerprint import fingerprint_files
@@ -55,6 +56,7 @@ class EnrollmentRequest:
     warmup_s: float = 3.0
     min_embeddings: int = 5
     max_embeddings: int = 10
+    save_foreground: bool = False
 
     def validate(self) -> None:
         if not self.person_id.strip():
@@ -127,8 +129,12 @@ class LiveEnrollmentCollector:
         session_id: str,
         session_dir: str | Path,
         source_metadata: dict[str, Any],
+        foreground_capture: ForegroundCapture | None = None,
     ) -> None:
         request.validate()
+        if request.save_foreground != (foreground_capture is not None):
+            raise ValueError("Foreground saving requires an explicit request and source writer")
+        self.foreground_capture = foreground_capture
         self.request = request
         self.model_record = dict(model_record)
         self.source_path = Path(source_path).expanduser().resolve()
@@ -230,6 +236,8 @@ class LiveEnrollmentCollector:
             window["direction_match"] = item.direction_match
             window["quality_accepted"] = item.quality_accepted
         if discard:
+            if self.foreground_capture is not None:
+                self.foreground_capture.discard_pass(item.pass_id)
             del self.embeddings[item.embedding_start_index :]
             del self.windows[item.embedding_start_index :]
             embedding_count = 0
@@ -291,7 +299,23 @@ class LiveEnrollmentCollector:
             }
         )
 
+    def add_foreground(self, points: np.ndarray, *, frame_index: int, timestamp: float,
+                       segment_start: bool, metadata: dict[str, Any]) -> None:
+        if self.foreground_capture is None:
+            return
+        if self.active_pass_id is None:
+            raise RuntimeError("Foreground frame was produced outside an enrollment pass")
+        self.foreground_capture.append(
+            self.active_pass_id, points, frame_index=frame_index, timestamp=timestamp,
+            segment_start=segment_start, metadata=metadata)
+
+    def cancel_foreground(self) -> None:
+        if self.foreground_capture is not None:
+            self.foreground_capture.abandon()
+
     def write_review_manifest(self, elapsed_s: float) -> None:
+        if self.foreground_capture is not None:
+            self.foreground_capture.pause()
         self._write_json(
             "capture_manifest.json",
             {
@@ -311,6 +335,7 @@ class LiveEnrollmentCollector:
         )
 
     def write_abandoned_manifest(self, elapsed_s: float) -> None:
+        self.cancel_foreground()
         self._write_json(
             "capture_manifest.json",
             {
@@ -396,6 +421,9 @@ class LiveEnrollmentCollector:
                 "request": asdict(self.request),
             },
         }
+        attachment = None
+        if self.foreground_capture is not None:
+            metadata["foreground_source_id"] = self.foreground_capture.source_id
         batch = EmbeddingBatch(
             embeddings=matrix,
             windows=selected_windows,
@@ -423,6 +451,17 @@ class LiveEnrollmentCollector:
             },
         )
         try:
+            if self.foreground_capture is not None:
+                attachment = self.foreground_capture.prepare(selected, {
+                    "session_id": self.session_id,
+                    "source_kind": self.source_kind,
+                    "source_fingerprint": self.source_fingerprint,
+                    "model": self.model_record, "capture": metadata,
+                    "selected_pass_ids": sorted(selected),
+                    "passes": [p for p in self.pass_summaries() if p["pass_id"] in selected],
+                    "windows": selected_windows,
+                    "consent": "operator_opt_in_at_enrollment_start",
+                })
             result = RegistrationService(repository).enroll(
                 batch=batch,
                 person_id=self.request.person_id.strip(),
@@ -431,8 +470,11 @@ class LiveEnrollmentCollector:
                 min_embeddings=self.request.min_embeddings,
                 max_embeddings=self.request.max_embeddings,
                 allow_duplicate_source=False,
+                source_attachment=attachment,
             )
         except Exception as exc:
+            if attachment is not None:
+                attachment.rollback()
             self._write_json(
                 "registration_error.json",
                 {
@@ -443,6 +485,13 @@ class LiveEnrollmentCollector:
                 },
             )
             raise
+        if attachment is not None:
+            result["foreground_source_id"] = attachment.source_id
+            try:
+                attachment.finish()
+            except Exception as exc:
+                # Gallery and source are already committed; a cleanup failure is not a retry.
+                result["source_cleanup_warning"] = str(exc)
         output = {
             **result,
             "state": "enrolled",
@@ -456,7 +505,11 @@ class LiveEnrollmentCollector:
             "manual_quality_override_pass_ids": sorted(manual_overrides),
             "passes": self.pass_summaries(),
         }
-        self._write_json("registration_result.json", output)
+        try:
+            self._write_json("registration_result.json", output)
+        except OSError as exc:
+            # The transaction succeeded. Do not invite a duplicate registration retry.
+            output["report_warning"] = str(exc)
         return output
 
     def record_failure(self, error: Exception, elapsed_s: float, reason: str) -> None:

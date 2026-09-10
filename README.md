@@ -32,6 +32,9 @@ and upstream sources.
 - [Portable Gallery export/import](docs/GALLERY_TRANSFER.md) with preview,
   explicit identity-conflict resolution, model checks, deduplication, and backups
   ([繁體中文](docs/GALLERY_TRANSFER_zh.md)).
+- [Opt-in enrollment foreground source recording](docs/ENROLLMENT_SOURCES.md),
+  pass-level review, playback, storage limits, and independent source deletion
+  ([繁體中文](docs/ENROLLMENT_SOURCES_zh.md)).
 - Rank-based identity matching with configurable unknown-score, margin, and
   temporal-stability thresholds.
 - RGB, foreground point-cloud, FPS, predicted identity, and similarity displays.

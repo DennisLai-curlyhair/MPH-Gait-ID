@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Opt-in, pre-sampling enrollment foreground XYZ recordings with bounded background writing.
+- Review-selected source commits, playback, storage limits and independent deletion.
+- Bilingual source-library controls and operational documentation.
+
+### Safety
+- Atomic Gallery/source indexing, owner UID tracking, hashes and crash cleanup.
+- Foreground recordings remain local; Gallery transfer archives still contain descriptors only.
+
 ## 0.2.0
 
 ### Added

@@ -15,6 +15,7 @@ from ..identity import suggest_registration_identity
 from ..i18n import I18n
 from ..ui.preview import render_image
 from ..ui.scrollable import ScrollableFrame
+from ..ui.workers import BackgroundWorker
 from .detection import (
     DEFAULT_SAM_CHECKPOINT,
     DEFAULT_SAM_MODEL_TYPE,
@@ -48,6 +49,9 @@ class RealtimePage(ttk.Frame):
         self.on_gallery_changed = on_gallery_changed
         self.camera_available = camera_available
         self.pipeline: RealtimePipeline | None = None
+        self.commit_worker = BackgroundWorker()
+        self.commit_pending = False
+        self.save_foreground_var = tk.BooleanVar(value=False)
         self.device_status = None
         self._rgb_photo: ImageTk.PhotoImage | None = None
         self._cloud_photo: ImageTk.PhotoImage | None = None
@@ -272,6 +276,7 @@ class RealtimePage(ttk.Frame):
         self.allow_multi_enrollment_check.configure(
             text=self.i18n.tr("realtime.allow_multi_enrollment")
         )
+        self.save_foreground_check.configure(text=self.i18n.tr("sources.opt_in"))
         self.rgb_pointcloud_check.configure(
             text=self.i18n.tr("realtime.rgb_pointcloud")
         )
@@ -418,6 +423,11 @@ class RealtimePage(ttk.Frame):
             sticky="w",
             pady=(8, 0),
         )
+
+        self.save_foreground_check = ttk.Checkbutton(
+            self.enrollment_frame, text=self.i18n.tr("sources.opt_in"),
+            variable=self.save_foreground_var)
+        self.save_foreground_check.grid(row=8, column=0, columnspan=2, sticky="w", pady=8)
 
         pass_controls = ttk.LabelFrame(
             self.enrollment_frame,
@@ -1493,6 +1503,7 @@ class RealtimePage(ttk.Frame):
             enrollment_min_embeddings=min_embeddings,
             enrollment_max_embeddings=max_embeddings,
             enrollment_stride=int(self.clip_len_var.get()),
+            save_enrollment_foreground=bool(self.save_foreground_var.get()),
             guided_passes=(operation == "enroll"),
             preprocessing_profile_id=self.controller.processing_version_id(),
             reject_multiple_people=self._should_reject_multiple_people(
@@ -1559,6 +1570,10 @@ class RealtimePage(ttk.Frame):
 
     def close(self) -> None:
         self.stop()
+        if (self.pipeline is not None and not self.pipeline.running
+                and self._pending_review_result is not None and not self.commit_pending):
+            self.pipeline.abandon_enrollment()
+            self._pending_review_result = None
 
     def _poll(self) -> None:
         if self.pipeline is not None:
@@ -1602,6 +1617,7 @@ class RealtimePage(ttk.Frame):
                 self.enrollment_min_spin,
                 self.enrollment_max_spin,
                 self.allow_multi_enrollment_check,
+                self.save_foreground_check,
                 self.autofill_button,
                 self.replay_entry,
                 self.replay_button,
@@ -1635,8 +1651,11 @@ class RealtimePage(ttk.Frame):
             self.enrollment_min_spin,
             self.enrollment_max_spin,
             self.allow_multi_enrollment_check,
+            self.save_foreground_check,
         ]:
             widget.configure(state="normal")
+        self.save_foreground_check.configure(
+            state="disabled" if self._pending_review_result is not None else "normal")
         self.check_device_button.configure(state="normal")
         self._source_changed()
         self._operation_changed(reset_result=False)
@@ -1881,12 +1900,16 @@ class RealtimePage(ttk.Frame):
         self.i18n.apply(window)
 
     def _close_enrollment_review(self) -> None:
+        if self.commit_pending:
+            return
         if self._review_window is not None:
             self._review_window.destroy()
         self._review_window = None
         self._review_selection_vars = {}
 
     def _resume_enrollment_review(self) -> None:
+        if self.commit_pending:
+            return
         if self.pipeline is None:
             return
         try:
@@ -1911,6 +1934,8 @@ class RealtimePage(ttk.Frame):
         self._update_pass_controls({"state": "enrollment_paused"})
 
     def _commit_enrollment_review(self) -> None:
+        if self.commit_pending:
+            return
         if self.pipeline is None:
             return
         selected = [
@@ -1936,11 +1961,27 @@ class RealtimePage(ttk.Frame):
             parent=self._review_window,
         ):
             return
-        try:
-            result = self.pipeline.commit_enrollment(selected)
-        except Exception as exc:
-            messagebox.showerror("Gallery commit failed", str(exc), parent=self._review_window)
-            return
+        pipeline = self.pipeline
+        self.commit_pending = True
+        self.status_var.set(self.i18n.tr("sources.committing"))
+        self.commit_worker.start(lambda _progress: pipeline.commit_enrollment(selected))
+        self.after(100, self._poll_commit)
+
+    def _poll_commit(self) -> None:
+        for message in self.commit_worker.drain():
+            if message.kind == "error":
+                self.commit_pending = False
+                self.status_var.set(message.payload["message"])
+                messagebox.showerror("Gallery commit failed", message.payload["message"],
+                                     parent=self._review_window)
+                return
+            if message.kind == "result":
+                self.commit_pending = False
+                self._enrollment_committed(message.payload)
+                return
+        self.after(100, self._poll_commit)
+
+    def _enrollment_committed(self, result: dict[str, Any]) -> None:
         self._pending_review_result = None
         self._close_enrollment_review()
         self._refresh_gallery_summary()
@@ -1965,6 +2006,8 @@ class RealtimePage(ttk.Frame):
         )
 
     def _abandon_enrollment_review(self) -> None:
+        if self.commit_pending:
+            return
         if not messagebox.askyesno(
             "Abandon enrollment",
             "Discard this review session without changing Gallery?",

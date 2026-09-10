@@ -1,5 +1,13 @@
 # Security and Local Data Handling
 
+## Enrollment Foreground Sources
+
+Opt-in enrollment recordings are biometric data. Their variable-size XYZ arrays,
+owner metadata and temporary files are stored locally, are not encrypted by the
+app, and must not be committed to Git. Deleting Gallery embeddings does not delete
+these independent source recordings or previous backups. See
+[source retention and deletion](docs/ENROLLMENT_SOURCES.md#deletion-transfer-and-privacy).
+
 ## Checkpoints Are Trusted Inputs
 
 The application is a local research prototype, not a sandbox for unknown model

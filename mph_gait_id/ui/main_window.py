@@ -14,6 +14,7 @@ from mph_gait_id.i18n import I18n, LANGUAGE_CHOICES
 
 from .player import PreviewPlayer
 from .gallery_manager import GalleryManagerPage
+from .enrollment_sources import EnrollmentSourcesPage
 from .performance_benchmark import PerformanceBenchmarkPage
 from .scrollable import ScrollableFrame
 from .workers import BackgroundWorker, WorkerMessage
@@ -261,6 +262,9 @@ class GaitIdentityWindow:
             camera_available=self._camera_available_for_benchmark,
         )
         self.performance_page.grid(row=0, column=0, sticky="nsew")
+        self.sources_page = EnrollmentSourcesPage(
+            self.mode_notebook, self.controller, can_edit=self._gallery_transfer_available)
+        self.mode_notebook.add(self.sources_page, text="nav.sources")
         self.mode_notebook.bind(
             "<<NotebookTabChanged>>",
             lambda _event: self._on_mode_changed(),
@@ -278,6 +282,8 @@ class GaitIdentityWindow:
             self.gallery_page.set_locale(locale_name)
         if hasattr(self, "performance_page"):
             self.performance_page.set_locale(locale_name)
+        if hasattr(self, "sources_page"):
+            self.sources_page.set_locale(locale_name)
         self.i18n.apply(self.root)
 
     def _on_mode_changed(self) -> None:
@@ -289,6 +295,10 @@ class GaitIdentityWindow:
             self.gallery_page.refresh_bundles()
         elif self.mode_notebook.select() == str(self.performance_page_host):
             self.performance_page.refresh_bundles()
+        if hasattr(self, "sources_page"):
+            self.sources_page.pause()
+            if self.mode_notebook.select() == str(self.sources_page):
+                self.sources_page.refresh()
 
     def _camera_available_for_realtime(self) -> tuple[bool, str]:
         benchmark = getattr(self, "performance_page", None)
@@ -1582,6 +1592,12 @@ class GaitIdentityWindow:
             tree.delete(*children)
 
     def _close(self) -> None:
+        if (getattr(getattr(self, "realtime_page", None), "commit_pending", False)
+                or getattr(getattr(self, "sources_page", None), "worker", self.worker).busy):
+            messagebox.showwarning("Please wait", self.i18n.tr("sources.committing"), parent=self.root)
+            return
+        if hasattr(self, "sources_page"):
+            self.sources_page.pause()
         dialog = getattr(getattr(self, "gallery_page", None), "transfer_dialog", None)
         if dialog is not None and dialog.winfo_exists() and dialog.worker.busy:
             dialog.close()

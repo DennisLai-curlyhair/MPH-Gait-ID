@@ -18,6 +18,15 @@ LANGUAGE_CHOICES = {
 
 
 MESSAGES: dict[str, dict[str, str]] = {
+    "nav.sources": {"zh_TW": "註冊來源點雲", "en": "Enrollment sources"},
+    "sources.opt_in": {
+        "zh_TW": "同意保存註冊前景點雲",
+        "en": "Consent to save enrollment foreground points",
+    },
+    "sources.committing": {
+        "zh_TW": "正在完成來源與 Gallery 操作，請稍候。",
+        "en": "Completing source and Gallery operation; please wait.",
+    },
     "app.title": {
         "zh_TW": "MPH-Gait ID 點雲步態身分辨識系統",
         "en": "MPH-Gait ID",

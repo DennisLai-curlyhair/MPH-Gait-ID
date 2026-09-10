@@ -31,6 +31,11 @@ class ReleaseSafetyTest(unittest.TestCase):
         ]
         if IS_APP:
             paths.append("mph_gait_id/model_bundles/user_custom_123/bundle.yaml")
+            paths.extend([
+                "custom/storage/main_enrollment_sources/records/id/manifest.json",
+                "custom/storage/main_enrollment_sources/staging/id/frames.jsonl",
+                "custom/storage/main_enrollment_sources/.writer.lock",
+            ])
         else:
             paths.extend([
                 "dataset/local/pointcloud/person_001/clear_data.npy",
