@@ -212,9 +212,10 @@ class GaitApplicationController:
 
     def import_gallery(
         self, path: str | Path, preview: dict[str, Any],
-        person_map: dict[str, str | None],
+        person_map: dict[str, str | None], *, restore_deleted: bool = False,
     ) -> dict[str, Any]:
-        return self.gallery_transfer().import_archive(path, preview, person_map)
+        return self.gallery_transfer().import_archive(
+            path, preview, person_map, restore_deleted=restore_deleted)
 
     def processing_version_id(self) -> str:
         return str(

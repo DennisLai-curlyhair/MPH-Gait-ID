@@ -23,6 +23,11 @@ def initialize_provenance(repository: GalleryRepository) -> None:
             CREATE TABLE IF NOT EXISTS gallery_transfer_tombstones (
                 kind TEXT NOT NULL, uid TEXT NOT NULL, deleted_at TEXT NOT NULL,
                 PRIMARY KEY(kind, uid));
+            CREATE TABLE IF NOT EXISTS gallery_transfer_restorations (
+                restoration_id INTEGER PRIMARY KEY, kind TEXT NOT NULL,
+                uid TEXT NOT NULL, local_id TEXT NOT NULL,
+                archive_sha256 TEXT NOT NULL, deleted_at TEXT NOT NULL,
+                restored_at TEXT NOT NULL);
         """)
         con.execute("INSERT OR IGNORE INTO gallery_transfer_meta VALUES (1,?)", (str(uuid.uuid4()),))
 
@@ -68,3 +73,18 @@ def retire_records(con: sqlite3.Connection, kind: str, local_ids: Iterable[str |
                         [(kind, uid, now) for uid in uids])
         con.execute("DELETE FROM gallery_transfer_aliases WHERE kind=? AND local_id=?",
                     (kind, str(local_id)))
+
+
+def restore_record(con: sqlite3.Connection, kind: str, uid: str,
+                   local_id: str | int, archive_sha256: str) -> bool:
+    """Retire one deletion marker and retain its history in the import transaction."""
+    row = con.execute(
+        "SELECT deleted_at FROM gallery_transfer_tombstones WHERE kind=? AND uid=?", (kind, uid)
+    ).fetchone()
+    if row is None:
+        return False
+    con.execute("INSERT INTO gallery_transfer_restorations "
+                "(kind,uid,local_id,archive_sha256,deleted_at,restored_at) VALUES (?,?,?,?,?,?)",
+                (kind, uid, str(local_id), archive_sha256, row[0], _utc_now()))
+    con.execute("DELETE FROM gallery_transfer_tombstones WHERE kind=? AND uid=?", (kind, uid))
+    return True

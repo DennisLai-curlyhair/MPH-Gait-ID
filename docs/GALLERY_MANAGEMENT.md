@@ -66,19 +66,49 @@ erasure**. Backups contain names and biometric vectors, are not encrypted, and
 are not automatically pruned. They are excluded from Git; protect storage access
 and define a retention policy.
 
-There is no one-click undo for permanent deletion. For full recovery, close all
-connections to the database, preserve the current database and its sidecars, then
-restore the pre-edit SQLite backup. A full restore also removes registrations
-made after that snapshot. Reimporting an old `.mphgallery` is not an undo action.
+An exported `.mphgallery` can selectively restore archived records through
+explicit import confirmation (below). It does not restore source media or undo
+all later changes. For whole-database recovery, close all database connections,
+preserve the current database and its sidecars, then restore the pre-edit SQLite
+backup. A full snapshot restore also removes registrations made after that snapshot.
+
+## Restore Deleted Records
+
+1. Open **Import Gallery** and select an archive made before deletion.
+2. Review the People and Models tabs. Deleted records are skipped by default.
+3. Enable **Restore previously deleted records**.
+4. A deleted person's original ID is selected if unused. If occupied, use
+   **New ID** to choose an unused ID. Deleted identities cannot be merged into an
+   existing person, even when the name matches. Other unresolved conflicts remain skipped.
+5. Confirm the selected people and compatible feature counts, then confirm import.
+   The importer creates a backup before writing.
+6. Check the restored counts and verify recognition with the matching model.
+
+If the person still exists and only fragments were deleted, restoration adds those
+archived features to the linked person without replacing the local name or status.
+Restored rows use the archive's active/inactive state; already present inactive
+rows stay inactive. Duplicate records are not added again.
+
+Only selected records present in the archive and compatible with installed models
+are restored. Missing models leave their feature deletion markers intact; install
+the matching bundle and import again with restoration enabled. An empty person
+can be restored without features. Restoring a deleted person may therefore restore
+the person record even when no compatible embeddings are currently available.
+
+The local `gallery_transfer_restorations` table records each restored UID, target
+ID, archive SHA256, deletion time and restoration time. Deletion markers are removed
+only for successfully restored UIDs in the same transaction. Errors roll back
+records, markers and audit entries together. This history is not tamper-proof.
 
 ## Interaction With Transfer
 
 - Renaming preserves the portable identity. Importing an older archive keeps
   the current local name and does not reactivate inactive vectors.
 - A permanent fragment delete records its known portable identities. Reimport
-  skips those vectors, reports the deleted count, and can import other entries.
-- A deleted person appears as **deleted** in an old archive's preview and must
-  remain skipped. It cannot be silently restored or remapped to a reused ID.
+  skips those vectors unless explicit restoration is enabled.
+- A deleted person defaults to **Skip**. Explicit restoration requires an unused
+  target ID; it never silently merges into a reused ID. Restored UIDs keep their
+  portable identity, so later imports are deduplicated.
 - A newly registered person using the same visible ID receives a different
   portable identity when exported. Another PC that still has the old person
   receives an ID conflict, not an automatic identity match.

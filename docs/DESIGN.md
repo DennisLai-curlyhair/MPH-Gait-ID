@@ -103,9 +103,12 @@ person deletion, with verified pre-edit backups and transactional rollback.
 `gallery_lifecycle.py` and `gallery_transfer.py` share portable identity and
 deletion bookkeeping in `gallery_provenance.py`. Person IDs are display-facing
 identifiers, while portable UIDs distinguish separate identity lifetimes. Known
-deleted UIDs are locally blocked from reimport; reusing a visible Person ID does
-not reuse the retired portable identity. Deletion history is not synchronized
-to other PCs. No encoder, weight, model-key or archive-format changes are required.
+deleted UIDs are skipped by default. Explicit restoration requires confirmation;
+deleted people must use unused target IDs. Successfully restored UIDs have their
+deletion markers removed with an audit entry in the same import transaction.
+Reusing a visible Person ID does not silently reuse the retired portable identity.
+Deletion and restoration history is local, not synchronized to other PCs.
+No encoder, weight, model-key or archive-format changes are required.
 See [Gallery management](GALLERY_MANAGEMENT.md) and
 [Gallery transfer](GALLERY_TRANSFER.md) for recovery and privacy boundaries.
 

@@ -24,6 +24,7 @@ class TransferUiGuardTest(unittest.TestCase):
         fake = SimpleNamespace(
             people={}, person_map={}, person_tree=Mock(), model_tree=Mock(), status=Mock(),
             notes=Mock(), apply_button=Mock(), tr=lambda en, zh: en,
+            restore_deleted=Mock(), restore_check=Mock(),
         )
         GalleryTransferDialog._show_preview(fake, {
             "persons": [{"uid": "a", "person_id": "P1", "display_name": "A", "status": "conflict", "target_id": "P1"},

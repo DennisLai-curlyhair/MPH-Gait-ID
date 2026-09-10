@@ -13,9 +13,10 @@ import uuid
 import zipfile
 
 import numpy as np
+from collections import Counter
 
 from .database import GalleryRepository, _utc_now
-from .gallery_provenance import initialize_provenance, is_deleted, portable_uid
+from .gallery_provenance import initialize_provenance, is_deleted, portable_uid, restore_record
 from .model_record import build_model_record
 from .model_store import ModelBundle, ModelStore
 
@@ -202,7 +203,7 @@ class GalleryTransfer:
     @staticmethod
     def _state(con: sqlite3.Connection) -> str:
         digest = hashlib.sha256()
-        for table in ("persons", "model_versions", "gallery_embeddings", "gallery_transfer_aliases", "gallery_transfer_model_specs", "gallery_transfer_tombstones"):
+        for table in ("persons", "model_versions", "gallery_embeddings", "gallery_transfer_aliases", "gallery_transfer_model_specs", "gallery_transfer_tombstones", "gallery_transfer_restorations"):
             for row in con.execute(f"SELECT * FROM {table} ORDER BY rowid"):
                 for value in row:
                     data = value if isinstance(value, bytes) else _json(value)
@@ -310,13 +311,23 @@ class GalleryTransfer:
                 status = ("deleted" if is_deleted(con, "person", person["uid"])
                           else "linked" if alias and local else "conflict" if local else "new")
                 people.append({**person, "status": status, "target_id": pid,
-                               "local_name": local["display_name"] if local else None})
+                               "local_name": local["display_name"] if local else None,
+                               "target_exists": local is not None,
+                               "restorable_embeddings": 0,
+                               })
             duplicate_count = sum(bool(con.execute(
                 "SELECT 1 FROM gallery_transfer_aliases WHERE kind='embedding' AND uid=?", (row["uid"],)
             ).fetchone()) for row in records["embeddings"])
-            deleted_count = sum(is_deleted(con, "embedding", row["uid"])
-                                or is_deleted(con, "person", row["person_uid"])
-                                for row in records["embeddings"])
+            deleted_uids = {row[0] for row in con.execute(
+                "SELECT uid FROM gallery_transfer_tombstones WHERE kind='embedding'")}
+            people_by_uid = {person["uid"]: person for person in people}
+            deleted_count = 0
+            for row in records["embeddings"]:
+                person = people_by_uid[row["person_uid"]]
+                if row["uid"] in deleted_uids or person["status"] == "deleted":
+                    deleted_count += 1
+                    if matches[row["model"]]["status"] == "compatible":
+                        person["restorable_embeddings"] += 1
         available = sum(matches[row["model"]]["status"] == "compatible" for row in records["embeddings"])
         return {"archive_sha256": package["sha256"], "database_state": state, "persons": people,
                 "models": matches, "embeddings": len(records["embeddings"]),
@@ -324,7 +335,10 @@ class GalleryTransfer:
                 "known_embedding_ids": duplicate_count, "deleted_embeddings": deleted_count}
 
     def import_archive(self, path: str | Path, preview: dict[str, Any],
-                       person_map: dict[str, str | None]) -> dict[str, Any]:
+                       person_map: dict[str, str | None], *,
+                       restore_deleted: bool = False) -> dict[str, Any]:
+        if type(restore_deleted) is not bool:
+            raise ValueError("restore_deleted must be a boolean")
         package = read_archive(path)
         if package["sha256"] != preview["archive_sha256"]:
             raise ValueError("Archive changed after preview; preview it again")
@@ -353,16 +367,29 @@ class GalleryTransfer:
         except OSError:
             pass
         inserted = duplicates = skipped = deleted_skipped = 0
+        restored_persons = restored_embeddings = 0
         with self.repository.connect() as con:
             con.execute("BEGIN IMMEDIATE")
             if self._state(con) != preview["database_state"]:
                 raise ValueError("Gallery changed after preview; preview it again")
+            deleted_people = {person["uid"] for person in records["persons"]
+                              if is_deleted(con, "person", person["uid"])}
+            target_counts = Counter(person_map.values())
+            # Check destinations before inserts: a reused readable ID does not
+            # establish that its new owner is the deleted person.
+            for uid in deleted_people:
+                target = person_map[uid]
+                if target is None:
+                    continue
+                if not restore_deleted:
+                    raise ValueError("Previously deleted person requires explicit restore confirmation")
+                if (con.execute("SELECT 1 FROM persons WHERE person_id=?", (target,)).fetchone()
+                        or target_counts[target] != 1):
+                    raise ValueError("Restoring a deleted person requires an unused, distinct target ID")
             for person in records["persons"]:
                 target = person_map[person["uid"]]
                 if target is None:
                     continue
-                if is_deleted(con, "person", person["uid"]):
-                    raise ValueError("Previously deleted person cannot be restored or remapped from this archive")
                 alias = con.execute("SELECT local_id FROM gallery_transfer_aliases WHERE kind='person' AND uid=?",
                                     (person["uid"],)).fetchone()
                 if alias and alias[0] != target:
@@ -376,11 +403,14 @@ class GalleryTransfer:
                                  person["created_at"], person["updated_at"]))
                 con.execute("INSERT OR IGNORE INTO gallery_transfer_aliases VALUES ('person',?,?)",
                             (person["uid"], target))
+                if person["uid"] in deleted_people:
+                    restored_persons += restore_record(con, "person", person["uid"], target, package["sha256"])
             for row in records["embeddings"]:
                 target_person = person_map[row["person_uid"]]
                 target_model = matches[row["model"]]["target"]
-                if (is_deleted(con, "embedding", row["uid"])
-                        or is_deleted(con, "person", row["person_uid"])):
+                was_deleted = is_deleted(con, "embedding", row["uid"])
+                if ((was_deleted or row["person_uid"] in deleted_people)
+                        and not restore_deleted):
                     skipped += 1
                     deleted_skipped += 1
                     continue
@@ -442,6 +472,9 @@ class GalleryTransfer:
                     inserted += 1
                 con.execute("INSERT OR IGNORE INTO gallery_transfer_aliases VALUES ('embedding',?,?)",
                             (row["uid"], str(local_id)))
+                if was_deleted:
+                    restored_embeddings += restore_record(con, "embedding", row["uid"], local_id, package["sha256"])
         return {"inserted": inserted, "duplicates": duplicates, "skipped": skipped,
                 "deleted_skipped": deleted_skipped,
+                "restored_persons": restored_persons, "restored_embeddings": restored_embeddings,
                 "backup": str(backup), "retained_archive": str(stored_package)}

@@ -85,9 +85,14 @@ the retained package and backup may remain. Existing inactive embeddings are not
 reactivated by repeated import. Deleted imported rows are not silently restored.
 
 Permanent deletions made through [Gallery Manager](GALLERY_MANAGEMENT.md) are
-tracked locally: deleted people appear as **deleted** and must remain skipped;
-deleted embeddings are skipped with a separate count. Reused Person IDs receive
-new portable identities. These safeguards do not delete data on other computers
+tracked locally. Deleted people and embeddings are skipped by default. Enable
+**Restore previously deleted records** to explicitly recover selected archived
+records, with an additional confirmation and restored counts in the result.
+A deleted person requires an unused target ID; use **New ID** if the old ID is
+occupied. Existing inactive entries stay inactive. See the
+[restoration workflow](GALLERY_MANAGEMENT.md#restore-deleted-records) for scope
+and audit details. Reused Person IDs receive new portable identities.
+These safeguards do not delete data on other computers
 or revoke archives. Raw SQLite deletion is unsupported and may require repair
 before an archive can be imported again.
 
@@ -145,6 +150,20 @@ subcommand. The `import` command requires a saved preview and `--apply`.
 Conflicting IDs default to skip. An optional `--person-map data/person_map.json`
 maps every preview person `uid` to a destination ID, or `null` to skip. Mapping
 to an existing ID is an explicit merge; confirm the real person's identity first.
+
+For explicit restoration, generate a fresh preview and add `--restore-deleted`:
+
+```bash
+python -m mph_gait_id.gallery_transfer_cli import gallery.mphgallery --preview-file data/import_preview.json --restore-deleted --apply
+```
+
+The flag restores compatible deleted features for selected people. Deleted people
+with unused IDs are selected automatically; occupied IDs remain skipped unless
+`--person-map` assigns an unused, distinct ID. Deleted people cannot be merged into
+existing people. Without the flag, deletion protection stays enabled. Review the
+preview's `restorable_embeddings` counts and `target_exists` fields before
+confirmation. Missing models remain skipped; regenerate previews after updating
+the application, Gallery, or model bundles.
 
 ## Verification
 

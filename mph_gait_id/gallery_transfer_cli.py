@@ -22,6 +22,8 @@ def main(argv: list[str] | None = None) -> int:
     load.add_argument("archive")
     load.add_argument("--preview-file", required=True)
     load.add_argument("--person-map", help="JSON object mapping each incoming person uid to a local ID or null.")
+    load.add_argument("--restore-deleted", action="store_true",
+                      help="Explicitly restore deleted records; deleted people require unused target IDs.")
     load.add_argument("--apply", action="store_true", help="Confirm the merge and the source bundle/enrollment settings.")
     args = parser.parse_args(argv)
     if args.command == "import" and not args.apply:
@@ -35,10 +37,12 @@ def main(argv: list[str] | None = None) -> int:
         plan = json.loads(Path(args.preview_file).read_text(encoding="utf-8"))
         mapping = (
             json.loads(Path(args.person_map).read_text(encoding="utf-8")) if args.person_map
-            else {person["uid"]: None if person["status"] in {"conflict", "deleted"} else person["target_id"]
+            else {person["uid"]: None if (person["status"] == "conflict" or
+                  (person["status"] == "deleted" and (not args.restore_deleted or person.get("target_exists", True))))
+                  else person["target_id"]
                   for person in plan["persons"]}
         )
-        result = controller.import_gallery(args.archive, plan, mapping)
+        result = controller.import_gallery(args.archive, plan, mapping, restore_deleted=args.restore_deleted)
     print(json.dumps(result, ensure_ascii=True, indent=2, allow_nan=False))
     return 0
 

@@ -60,7 +60,11 @@ bundle 與編碼程式補充比對資訊，請確認它們仍與原本註冊時�
 已保留的匯入包和備份可能繼續存在，供排錯與重試。
 
 透過 [Gallery 管理](GALLERY_MANAGEMENT_zh.md) 永久刪除的資料會留下本機
-識別紀錄：舊包中的已刪人物必須略過；已刪特徵會略過並另列數量。
+識別紀錄：舊包中的已刪人物與特徵預設略過。勾選「還原先前刪除的資料」
+並再次確認後，可恢復選定的相容資料；結果會列出還原人物及特徵數。
+已刪人物須使用未被占用的 ID，原 ID 已有其他人物時必須另建 ID，不可
+直接合併。本機既有停用資料仍保持停用。完整流程與還原紀錄說明見
+[Gallery 管理指南](GALLERY_MANAGEMENT_zh.md)。
 重用 Person ID 的新人物會取得不同可攜式識別碼，不會自動連回舊人物。
 這不是跨電腦同步刪除，也不撤銷其他電腦或舊匯出包中的資料。
 直接用 SQLite 刪除不屬於支援流程，可能需要修復後才能重新匯入。
@@ -102,6 +106,18 @@ python -m unittest discover -s mph_gait_id/tests -v
 匯入預設略過衝突 ID。需要手動對應時，用 `--person-map data/person_map.json`，
 以每位預覽人物的 `uid` 為 key、目的 ID 為值；`null` 表示略過。
 對應既有人物 ID 等同明確合併，務必確認身分。
+
+需要明確還原時，先重新產生預覽，再加入 `--restore-deleted`：
+
+```bash
+python -m mph_gait_id.gallery_transfer_cli import gallery.mphgallery --preview-file data/import_preview.json --restore-deleted --apply
+```
+
+選取人物的相容已刪特徵會還原。已刪人物的 ID 未被占用時自動選取，
+已被占用則仍略過，須以 `--person-map` 指定未使用且不重複的新 ID；
+已刪人物不能合併至既有人物。不加此旗標仍維持刪除保護。
+執行前檢查預覽中的 `restorable_embeddings` 與 `target_exists`。
+缺少模型的特徵仍略過；更新應用程式、Gallery 或模型後須重新產生預覽。
 
 自動測試使用暫存資料庫與合成特徵，涵蓋往返搬移、停用／去重、相容性、
 衝突、損壞檔案、過期預覽與回滾。這不等於 Azure Kinect 實機或跨設備準確率驗證。

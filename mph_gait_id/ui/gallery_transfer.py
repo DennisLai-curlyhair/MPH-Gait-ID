@@ -44,8 +44,15 @@ class GalleryTransferDialog(tk.Toplevel):
             "包含個人辨識特徵，匯出檔未加密。不包含模型權重或原始點雲。"))
         ttk.Label(self, textvariable=self.notes, wraplength=820).grid(
             row=3, column=0, sticky="ew", padx=12, pady=6)
+        self.restore_deleted = tk.BooleanVar(value=False)
+        self.restore_check = ttk.Checkbutton(
+            self, text=self.tr("Restore previously deleted records", "還原先前刪除的資料"),
+            variable=self.restore_deleted, command=self._restore_changed, state="disabled")
+        self.restore_check.grid(row=4, column=0, sticky="w", padx=12)
+        if operation == "export":
+            self.restore_check.grid_remove()
         actions = ttk.Frame(self)
-        actions.grid(row=4, column=0, sticky="ew", padx=12, pady=8)
+        actions.grid(row=5, column=0, sticky="ew", padx=12, pady=8)
         self.edit_buttons = []
         for column, (label, callback) in enumerate((
             (self.tr("New ID", "另建人物 ID"), self._new_id),
@@ -112,6 +119,7 @@ class GalleryTransferDialog(tk.Toplevel):
         self.operation = operation
         self.status.set(self.tr("Checking / processing Gallery...", "正在檢查／處理 Gallery…"))
         self.apply_button.configure(state="disabled")
+        self.restore_check.configure(state="disabled")
         for button in self.edit_buttons:
             button.configure(state="disabled")
         self.progress.start(15)
@@ -137,6 +145,9 @@ class GalleryTransferDialog(tk.Toplevel):
                                     f": {result['inserted']} / {result['duplicates']} / {result['skipped']}")
                     self.status.set(self.status.get() + self.tr("; previously deleted: ", "；已刪除而略過：")
                                     + str(result.get("deleted_skipped", 0)))
+                    self.status.set(self.status.get() + self.tr(
+                        "; restored people / embeddings: ", "；已還原人物／特徵：") +
+                        f"{result.get('restored_persons', 0)} / {result.get('restored_embeddings', 0)}")
                     self.notes.set(self.tr("Backup", "備份") + f": {result['backup']}\n" +
                                    self.tr("Retained package", "保留匯入包") + f": {result['retained_archive']}")
                     if self.on_changed:
@@ -145,6 +156,7 @@ class GalleryTransferDialog(tk.Toplevel):
 
     def _show_preview(self, preview: dict) -> None:
         self.preview = preview
+        self.restore_deleted.set(False)
         for person in preview["persons"]:
             uid = person["uid"]
             self.people[uid] = person
@@ -164,9 +176,29 @@ class GalleryTransferDialog(tk.Toplevel):
         self.notes.set(self.tr(
             "ID conflicts default to Skip. Missing/incompatible models remain in the retained package; install matching bundles and import again. Bundle settings describe the exporter, not historical enrollment settings. Confirm they have not changed since enrollment.",
             "ID 衝突預設略過。不相容模型的特徵保留在匯入包，安裝相符模型後可重新匯入。Bundle 設定為匯出當下的版本，請確認與原註冊時一致。")
-                        + self.tr(" Locally deleted identities and embeddings cannot be restored by reimport.",
-                                                " 本機已永久刪除的人物與特徵不會因重新匯入而恢復。"))
+                        + self.tr(" Deleted records are skipped unless restoration is enabled. Occupied IDs require a new ID.",
+                                  " 已刪資料預設略過；勾選還原後可恢復，ID 已被占用者須另建 ID。"))
+        self.restore_check.configure(state="normal" if preview.get("deleted_embeddings", 0)
+                                     or any(p["status"] == "deleted" for p in preview["persons"])
+                                     else "disabled")
         self.apply_button.configure(state="normal")
+
+    def _restore_changed(self) -> None:
+        if self.worker.busy or self.operation != "preview":
+            return
+        restore = self.restore_deleted.get()
+        for uid, person in self.people.items():
+            if person["status"] != "deleted":
+                continue
+            target = self.person_map[uid]
+            if not restore:
+                target = None
+            elif target is None and not person["target_exists"]:
+                proposed = person["target_id"]
+                if proposed not in self.person_map.values():
+                    target = proposed
+            self._set_target(uid, target)
+        self._actions()
 
     def _selected(self) -> str | None:
         selected = self.person_tree.selection()
@@ -174,14 +206,26 @@ class GalleryTransferDialog(tk.Toplevel):
 
     def _actions(self) -> None:
         enabled = self._selected() is not None and not self.worker.busy and self.operation == "preview"
-        if enabled and self.people[self._selected()]["status"] == "deleted":
+        status = self.people[self._selected()]["status"] if enabled else None
+        if status == "deleted" and not self.restore_deleted.get():
             enabled = False
         for button in self.edit_buttons:
             button.configure(state="normal" if enabled else "disabled")
+        if enabled and status in {"linked", "deleted"}:
+            self.edit_buttons[1].configure(state="disabled")
+            if status == "linked":
+                self.edit_buttons[0].configure(state="disabled")
 
     def _set_target(self, uid: str, target: str | None) -> None:
-        if self.people[uid]["status"] == "deleted" and target is not None:
-            return
+        person = self.people[uid]
+        if person["status"] == "deleted":
+            if target is not None and not self.restore_deleted.get():
+                return
+            label = (self.tr("Restore", "還原") if target is not None else
+                     self.tr("Deleted: choose new ID", "已刪除：須另建 ID")
+                     if self.restore_deleted.get() and person["target_exists"] else
+                     self.tr("Deleted (skipped)", "已刪除（略過）"))
+            self.person_tree.set(uid, "status", label)
         self.person_map[uid] = target
         self.person_tree.set(uid, "target", target or "-")
 
@@ -189,7 +233,8 @@ class GalleryTransferDialog(tk.Toplevel):
         uid = self._selected()
         if uid is None:
             return
-        if self.people[uid]["status"] in {"linked", "deleted"}:
+        if (self.people[uid]["status"] == "linked" or
+                (self.people[uid]["status"] == "deleted" and not self.restore_deleted.get())):
             messagebox.showinfo(self.title(), self.tr("Previously linked identities cannot be remapped.", "已匯入的人物不可重新對應 ID。"), parent=self)
             return
         target = simpledialog.askstring(self.title(), self.tr("New person ID", "新的人物 ID"), parent=self)
@@ -197,7 +242,7 @@ class GalleryTransferDialog(tk.Toplevel):
             return
         target = target.strip()
         if self.controller.get_person(target) or target in self.person_map.values():
-            messagebox.showerror(self.title(), self.tr("ID already exists. Use explicit merge instead.", "ID 已存在，請使用合併功能。"), parent=self)
+            messagebox.showerror(self.title(), self.tr("ID already exists or is selected. Choose an unused ID.", "ID 已存在或被其他匯入人物選用，請指定未使用的 ID。"), parent=self)
             return
         self._set_target(uid, target)
 
@@ -226,14 +271,35 @@ class GalleryTransferDialog(tk.Toplevel):
             self._set_target(uid, None)
 
     def _import(self) -> None:
-        if self.preview is None:
+        if self.preview is None or self.worker.busy or self.operation != "preview":
             return
+        mapping = dict(self.person_map)
+        restore = self.restore_deleted.get()
+        affected = [person for uid, person in self.people.items()
+                    if mapping[uid] is not None and
+                    (person["status"] == "deleted" or person.get("restorable_embeddings", 0))]
+        if restore and affected:
+            people = sum(person["status"] == "deleted" for person in affected)
+            embeddings = sum(person.get("restorable_embeddings", 0) for person in affected)
+            details = "\n".join(f"{p['person_id']} / {p['display_name']} -> {mapping[p['uid']]}"
+                                for p in affected[:8])
+            if len(affected) > 8:
+                details += f"\n... (+{len(affected) - 8})"
+            if not messagebox.askyesno(self.title(), self.tr(
+                    "Restore previously deleted data?\nPeople / compatible embeddings: ",
+                    "確認還原先前刪除的資料？\n人物／相容特徵：") +
+                    f"{people} / {embeddings}\n{details}\n" + self.tr(
+                    "Only the selected archive records will be restored, with their archived active state. A backup is created first.",
+                    "僅還原此匯入包中選定的資料，依匯出時啟停狀態還原；操作前會先備份。"),
+                    parent=self):
+                return
         if not messagebox.askyesno(self.title(), self.tr(
             "Import the selected identities? Existing inactive entries remain inactive. Only use archives from a trusted source.",
             "匯入選定人物？既有停用資料將保持停用。請只使用可信來源的匯入包。"), parent=self):
             return
-        mapping = dict(self.person_map)
-        self._start("import", lambda: self.controller.import_gallery(self.path, self.preview, mapping))
+        preview, path = self.preview, self.path
+        self._start("import", lambda: self.controller.import_gallery(
+            path, preview, mapping, restore_deleted=restore))
 
     def close(self) -> None:
         if self.worker.busy:
