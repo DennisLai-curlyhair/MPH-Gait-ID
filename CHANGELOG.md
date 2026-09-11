@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### UI
+- Add a Realtime readiness checklist, localized pipeline states, frame-buffer
+  progress and guided enrollment phase indicators.
+- Wait for capture readiness and pass-command acknowledgement; lock configuration
+  through pending review and worker cleanup. Run device probes and Stop in the
+  background, and preserve settings when controls are released.
+- Retain review selections on reopen, disable empty/duplicate commits and show
+  save progress; retain failed reviews for retry.
+- Separate multi-model job results from logs, clarify transfer phases and check
+  offline Gallery availability before encoding.
+- Add workflow regression tests and bilingual phase-two acceptance guides.
 - Reserve bilingual control/tab widths and table-heading space; wrap long status
   text and add scrolling for narrow settings and preview tool panels.
 - Add resizable Realtime sidebar and useful minimum areas for Offline previews

@@ -1,5 +1,7 @@
 from __future__ import annotations
 from copy import deepcopy
+import math
+import time
 
 from pathlib import Path
 from typing import Any, Callable
@@ -16,14 +18,15 @@ from ..identity import suggest_registration_identity
 from ..i18n import I18n
 from ..ui.preview import render_image
 from ..ui.scrollable import ScrollableFrame
-from ..ui.layout import WrappedLabel
+from ..ui.layout import SplitPane, WrappedLabel
+from ..ui.workflow import ControlLock, form_controls, snapshot_feedback
 from ..ui.workers import BackgroundWorker
 from .detection import (
     DEFAULT_SAM_CHECKPOINT,
     DEFAULT_SAM_MODEL_TYPE,
     DEFAULT_YOLO_MODEL,
     DEFAULT_YOLO_SEG_MODEL,
-    resolve_sam_checkpoint,
+    resolve_sam_checkpoint_path,
     resolve_yolo_weights_reference,
 )
 from .devices import probe_azure_kinect
@@ -53,6 +56,17 @@ class RealtimePage(ttk.Frame):
         self.pipeline: RealtimePipeline | None = None
         self.commit_worker = BackgroundWorker()
         self.commit_pending = False
+        self.device_worker = BackgroundWorker()
+        self._device_check_pending = False
+        self.stop_worker = BackgroundWorker()
+        self._stop_pending = False
+        self._session_active = False
+        self._capture_ready = False
+        self._pass_action = None
+        self._pass_requested_at = 0.0
+        self._pass_result = {}
+        self._readiness_after = None
+        self._gallery_counts = {}
         self.save_foreground_var = tk.BooleanVar(value=False)
         self.device_status = None
         self._rgb_photo: ImageTk.PhotoImage | None = None
@@ -61,6 +75,7 @@ class RealtimePage(ttk.Frame):
         self._pending_review_result: dict[str, Any] | None = None
         self._review_window: tk.Toplevel | None = None
         self._review_selection_vars: dict[str, tk.BooleanVar] = {}
+        self._review_choices: dict[str, bool] = {}
 
         self.operation_var = tk.StringVar(
             value=self._option_label(self.operation_labels, "recognize")
@@ -214,6 +229,15 @@ class RealtimePage(ttk.Frame):
         self.refresh_bundles()
         self._source_changed()
         self._operation_changed()
+        for variable in (self.operation_var, self.source_var, self.detector_var,
+                         self.replay_path_var, self.yolo_weights_var, self.sam_checkpoint_var,
+                         self.bundle_var, self.clip_len_var, self.stride_var,
+                         self.enrollment_person_id_var, self.enrollment_name_var,
+                         self.enrollment_duration_var, self.enrollment_warmup_var,
+                         self.enrollment_min_var, self.enrollment_max_var,
+                         self.threshold_var, self.margin_var):
+            variable.trace_add("write", self._schedule_readiness)
+        self._refresh_readiness()
         self.after(50, self._poll)
 
     @staticmethod
@@ -290,6 +314,14 @@ class RealtimePage(ttk.Frame):
                 variable = getattr(self, name, None)
                 if variable is not None:
                     variable.set(self.i18n.tr(variable.get()))
+        if "readiness_vars" in self.__dict__:
+            self._refresh_readiness()
+            self._update_pass_controls()
+            self._update_review_controls()
+            if self._stop_pending:
+                self.result_var.set(self.i18n.tr("workflow.stopping"))
+            elif self._last_snapshot is not None and self._session_active:
+                self._render_feedback(self._last_snapshot)
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -307,6 +339,10 @@ class RealtimePage(ttk.Frame):
         panes.add(content, weight=1)
         self._build_sidebar(sidebar.content)
         self._build_content(content)
+        self._config_lock = ControlLock(form_controls(sidebar.content, exclude=(
+            self.start_button, self.stop_button, self.start_pass_button,
+            self.end_pass_button, self.discard_pass_button, self.finish_review_button,
+            self.pass_direction_combo)))
 
     def _build_sidebar(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
@@ -804,12 +840,22 @@ class RealtimePage(ttk.Frame):
             state="disabled",
         )
         self.stop_button.grid(row=0, column=1, sticky="ew", padx=(8, 0))
-        ttk.Label(
+        WrappedLabel(
             parent,
             textvariable=self.status_var,
             style="Muted.Panel.TLabel",
-            wraplength=345,
-        ).grid(row=5, column=0, sticky="w", pady=(10, 0))
+        ).grid(row=5, column=0, sticky="ew", pady=(10, 0))
+        readiness = ttk.LabelFrame(parent, text="workflow.readiness", padding=8)
+        readiness.grid(row=6, column=0, sticky="ew", pady=(10, 0))
+        readiness.columnconfigure(1, weight=1)
+        self.readiness_vars = {}
+        for row, key in enumerate(("source", "model", "detector", "gallery", "identity", "settings")):
+            variable = tk.StringVar()
+            self.readiness_vars[key] = variable
+            ttk.Label(readiness, text="workflow." + key, style="Muted.Panel.TLabel").grid(
+                row=row, column=0, sticky="nw", padx=(0, 8), pady=3)
+            WrappedLabel(readiness, textvariable=variable, style="Panel.TLabel").grid(
+                row=row, column=1, sticky="ew", pady=3)
 
     def _build_content(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
@@ -823,6 +869,17 @@ class RealtimePage(ttk.Frame):
         WrappedLabel(result, textvariable=self.result_detail_var, style="Muted.Panel.TLabel").grid(
             row=1, column=0, sticky="ew", pady=(3, 0)
         )
+        self.enrollment_stages = ttk.Frame(result, style="Panel.TFrame")
+        self.enrollment_stages.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        self.stage_labels = []
+        for column, stage in enumerate(("prepare", "capture", "review", "save")):
+            self.enrollment_stages.columnconfigure(column, weight=1, uniform="stage")
+            label = WrappedLabel(self.enrollment_stages, text="workflow.stage." + stage,
+                                 style="Muted.Panel.TLabel")
+            label.grid(row=0, column=column, sticky="ew")
+            self.stage_labels.append(label)
+        self.buffer_progress = ttk.Progressbar(result, mode="determinate", maximum=15)
+        self.buffer_progress.grid(row=3, column=0, sticky="ew", pady=(5, 0))
 
         telemetry = ttk.Frame(parent, style="Panel.TFrame")
         telemetry.grid(row=1, column=0, sticky="ew", pady=(10, 10))
@@ -860,15 +917,15 @@ class RealtimePage(ttk.Frame):
                 row=1, column=0, sticky="ew"
             )
 
-        paned = ttk.Panedwindow(parent, orient=tk.VERTICAL)
+        paned = SplitPane(parent, orient=tk.VERTICAL, fraction=0.76, minimum=(220, 80))
         paned.grid(row=2, column=0, sticky="nsew")
         previews = ttk.Frame(paned, style="Panel.TFrame")
         details = ttk.Frame(paned, style="Panel.TFrame")
         paned.add(previews, weight=4)
         paned.add(details, weight=1)
-        previews.columnconfigure(0, weight=1, minsize=360)
-        previews.columnconfigure(1, weight=1, minsize=360)
-        previews.rowconfigure(0, weight=1, minsize=300)
+        previews.columnconfigure(0, weight=1, minsize=0, uniform="preview")
+        previews.columnconfigure(1, weight=1, minsize=0, uniform="preview")
+        previews.rowconfigure(0, weight=1, minsize=100)
 
         rgb_group = ttk.LabelFrame(previews, text="RGB detection", padding=5)
         cloud_group = ttk.LabelFrame(previews, text="Filtered person point cloud", padding=5)
@@ -880,7 +937,7 @@ class RealtimePage(ttk.Frame):
         self.preview_container = previews
         self.rgb_group = rgb_group
         self.cloud_group = cloud_group
-        self._preview_layout_mode = "wide"
+        self._preview_layout_mode = ""
         previews.bind("<Configure>", self._update_preview_layout, add="+")
 
         rgb_controls = ttk.Frame(rgb_group, style="Panel.TFrame")
@@ -896,11 +953,12 @@ class RealtimePage(ttk.Frame):
         cloud_controls = ttk.Frame(cloud_group, style="Panel.TFrame")
         cloud_controls.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         cloud_controls.columnconfigure(0, weight=1)
-        ttk.Label(
+        self.cloud_scale_label = WrappedLabel(
             cloud_controls,
             text="Fixed 2.4 m view",
             style="Muted.Panel.TLabel",
-        ).grid(row=0, column=0, sticky="w")
+        )
+        self.cloud_scale_label.grid(row=0, column=0, sticky="ew")
         ttk.Button(
             cloud_controls,
             text="−",
@@ -966,8 +1024,14 @@ class RealtimePage(ttk.Frame):
 
     def _update_preview_layout(self, event: tk.Event) -> None:
         width = max(1, int(getattr(event, "width", 1)))
+        height = max(1, int(getattr(event, "height", 1)))
         threshold = 700 if self._preview_layout_mode == "wide" else 740
-        mode = "wide" if width >= threshold else "stacked"
+        tall = height >= (280 if self._preview_layout_mode == "stacked" else 320)
+        mode = "stacked" if width < threshold and tall else "wide"
+        if mode == "wide" and width < 740:
+            self.cloud_scale_label.grid_remove()
+        else:
+            self.cloud_scale_label.grid()
         if mode == self._preview_layout_mode:
             return
         self._preview_layout_mode = mode
@@ -1093,11 +1157,17 @@ class RealtimePage(ttk.Frame):
         bundle_id = self._bundle_id(required=False)
         if not bundle_id:
             return
-        clip_len = int(self.clip_len_var.get())
+        try:
+            clip_len = int(self.clip_len_var.get())
+        except (ValueError, tk.TclError):
+            self._schedule_readiness()
+            return
         summary = self.controller.database_summary(
             bundle_id,
             clip_len=clip_len,
         )
+        self._gallery_counts = summary
+        self._schedule_readiness()
         self.gallery_var.set(
             f"Gallery T={clip_len}: "
             f"{summary.get('persons', 0)} identities / "
@@ -1116,6 +1186,97 @@ class RealtimePage(ttk.Frame):
                     person.get("embedding_count", 0),
                 ),
             )
+
+    def _schedule_readiness(self, *_args) -> None:
+        if self._readiness_after is not None:
+            self.after_cancel(self._readiness_after)
+        self._readiness_after = self.after_idle(self._refresh_readiness)
+
+    def _refresh_readiness(self) -> None:
+        if self._readiness_after is not None:
+            self.after_cancel(self._readiness_after)
+            self._readiness_after = None
+        tr = self.i18n.tr
+        enrolling = self._operation() == "enroll"
+        blocker = ""
+        source = self.source_labels.get(self.source_var.get())
+        if source == "replay":
+            source_ok = Path(self.replay_path_var.get()).expanduser().is_dir()
+            source_text = tr("workflow.ready" if source_ok else "workflow.source_missing")
+            if not source_ok:
+                blocker = source_text
+        else:
+            source_text = (self.device_status.message if self.device_status is not None
+                           else tr("workflow.not_checked"))
+        self.readiness_vars["source"].set(source_text)
+        bundle_id = self._bundle_id(required=False)
+        try:
+            bundle = self.controller.model_store.get(bundle_id) if bundle_id else None
+            model_ok = bundle is not None and bundle.checkpoint.is_file()
+        except (KeyError, ValueError, FileNotFoundError):
+            model_ok = False
+        self.readiness_vars["model"].set(tr("workflow.model_pending" if model_ok else "workflow.model_missing"))
+        if not model_ok:
+            blocker = blocker or tr("workflow.model_missing")
+        detector = self.detector_labels.get(self.detector_var.get())
+        detector_text = tr("workflow.ready")
+        try:
+            if detector in {"yolo", "yolo_seg", "yolo_sam"}:
+                resolve_yolo_weights_reference(self.yolo_weights_var.get().strip() or DEFAULT_YOLO_MODEL)
+                detector_text = tr("workflow.detector_pending")
+            if detector == "yolo_sam":
+                resolve_sam_checkpoint_path(self.sam_checkpoint_var.get().strip())
+        except (FileNotFoundError, ValueError) as exc:
+            detector_text = str(exc)
+            blocker = blocker or detector_text
+        self.readiness_vars["detector"].set(detector_text)
+        try:
+            length = int(self.clip_len_var.get())
+            valid = length > 0 and int(self.stride_var.get()) > 0
+            valid = valid and all(math.isfinite(float(var.get())) for var in (
+                self.threshold_var, self.margin_var, self.enrollment_duration_var,
+                self.enrollment_warmup_var))
+            if enrolling:
+                valid = valid and (float(self.enrollment_duration_var.get()) > 0
+                    and float(self.enrollment_warmup_var.get()) >= 0
+                    and 0 < int(self.enrollment_min_var.get()) <= int(self.enrollment_max_var.get()))
+        except (ValueError, tk.TclError):
+            valid, length = False, 0
+        self.readiness_vars["settings"].set(tr("workflow.ready" if valid else "workflow.invalid_settings"))
+        if not valid:
+            blocker = blocker or tr("workflow.invalid_settings")
+        gallery = self._gallery_counts
+        if gallery.get("bundle_id") != bundle_id or gallery.get("clip_len") != length:
+            gallery = {}
+        self.readiness_vars["gallery"].set(tr("workflow.gallery_optional") if enrolling else
+            (tr("workflow.gallery_count", persons=gallery.get("persons", 0),
+                count=gallery.get("active_embeddings", 0), length=length)
+             if gallery.get("active_embeddings", 0) else tr("workflow.no_gallery.detail")))
+        identity_text = tr("workflow.not_required")
+        if enrolling:
+            person_id = self.enrollment_person_id_var.get().strip()
+            name = self.enrollment_name_var.get().strip()
+            identity_text = tr("workflow.ready")
+            if not person_id or not name:
+                identity_text = tr("workflow.identity_missing")
+                blocker = blocker or identity_text
+            else:
+                person = self.controller.get_person(person_id)
+                if person is not None and str(person["display_name"]) != name:
+                    identity_text = tr("workflow.identity_conflict", name=person["display_name"])
+                    blocker = blocker or identity_text
+        self.readiness_vars["identity"].set(identity_text)
+        self._readiness_blocker = blocker
+        busy = (self._session_active or self._stop_pending or self._device_check_pending
+                or self.commit_pending or self._pending_review_result is not None)
+        self.start_button.configure(state="disabled" if busy or blocker else "normal")
+
+    def _render_feedback(self, snapshot: PipelineSnapshot) -> None:
+        title, detail = snapshot_feedback(snapshot, self.i18n.tr)
+        self.result_var.set(title)
+        self.result_detail_var.set(detail)
+        self.buffer_progress.configure(maximum=max(1, snapshot.clip_len),
+            value=min(snapshot.buffer_size, max(1, snapshot.clip_len)))
 
     def _update_pass_tree(self, passes: list[dict[str, Any]] | None = None) -> None:
         if passes is None and self.pipeline is not None:
@@ -1149,74 +1310,98 @@ class RealtimePage(ttk.Frame):
             )
 
     def _update_pass_controls(self, result: dict[str, Any] | None = None) -> None:
+        acknowledged = result is not None
+        if result is not None:
+            self._pass_result = dict(result)
+        result = self._pass_result
         enrolling = self._operation() == "enroll"
         running = bool(self.pipeline is not None and self.pipeline.running)
         reviewing = self._pending_review_result is not None
-        state = str((result or {}).get("state", ""))
-        active = bool((result or {}).get("active_pass_id")) or state == "enrolling"
+        state = str(result.get("state", ""))
+        active = bool(result.get("active_pass_id")) or state == "enrolling"
         requested = state == "enrollment_countdown"
-        paused = running and not active and not requested
+        if acknowledged and self._pass_action == "start" and (active or requested):
+            self._pass_action = None
+        elif acknowledged and self._pass_action == "end" and state == "enrollment_paused" and not active:
+            self._pass_action = None
+        pending = self._pass_action
+        available = (enrolling and running and self._capture_ready and not reviewing
+                     and not self.commit_pending and not self._stop_pending)
         self.pass_direction_combo.configure(
-            state="readonly" if enrolling and not active and not requested and not reviewing else "disabled"
-        )
+            state="readonly" if available and not active and not requested and not pending else "disabled")
         self.start_pass_button.configure(
-            state="normal" if enrolling and paused and not reviewing else "disabled"
-        )
+            state="normal" if available and not active and not requested and not pending else "disabled")
         self.end_pass_button.configure(
-            state="normal" if enrolling and running and (active or requested) else "disabled"
-        )
-        self.discard_pass_button.configure(
-            state="normal" if enrolling and running and (active or requested) else "disabled"
-        )
+            state="normal" if available and (active or requested or pending == "start")
+            and pending not in {"end", "finish"} else "disabled")
+        self.discard_pass_button.configure(state=self.end_pass_button.cget("state"))
         self.finish_review_button.configure(
-            state="normal" if enrolling and (running or reviewing) else "disabled",
-            text="Open review" if reviewing else "Finish & review",
-        )
-        if reviewing:
-            self.pass_status_var.set("Capture stopped. Review and commit selected passes.")
-        elif active:
-            self.pass_status_var.set("Recording this one-way pass; press End at the finish line.")
-        elif requested:
-            self.pass_status_var.set("Person detected; pass warm-up/countdown is running.")
-        elif paused:
-            self.pass_status_var.set("Session ready. Choose a direction and press Start pass.")
-        elif enrolling:
-            self.pass_status_var.set("Start the session, then record one-way passes.")
+            state="normal" if not self.commit_pending and not self._stop_pending
+            and (reviewing or available and not pending) else "disabled",
+            text=self.i18n.tr("Open review" if reviewing else "Finish & review"))
+        if enrolling:
+            self.enrollment_stages.grid()
+        else:
+            self.enrollment_stages.grid_remove()
+        stage = 3 if self.commit_pending or state == "enrolled" else 2 if reviewing else 1 if available else 0
+        for index, label in enumerate(self.stage_labels):
+            label.configure(style="Panel.TLabel" if index == stage else "Muted.Panel.TLabel")
+        if self.commit_pending:
+            text = self.i18n.tr("sources.committing")
+        elif self._stop_pending:
+            text = self.i18n.tr("workflow.stopping")
+        elif reviewing:
+            text = self.i18n.tr("workflow.enrollment_review.detail",
+                               passes=self._pending_review_result.get("usable_passes", 0),
+                               count=self._pending_review_result.get("captured_embeddings", 0))
+        elif pending:
+            text = self.i18n.tr("workflow.request." + pending)
+        elif running and not self._capture_ready:
+            text = self.i18n.tr("workflow.source_ready.detail")
+        elif active and available:
+            text = self.i18n.tr("Recording this one-way pass; press End at the finish line.")
+        elif requested and available:
+            text = self.i18n.tr("workflow.request.start")
+        elif available:
+            text = self.i18n.tr("Session ready. Choose a direction and press Start pass.")
+        else:
+            text = self.i18n.tr("Start the session, then record one-way passes.")
+        self.pass_status_var.set(text)
 
     def _start_enrollment_pass(self) -> None:
-        if self.pipeline is None:
+        if self.start_pass_button.instate(["disabled"]):
             return
         try:
             direction = self.pass_direction_labels[self.pass_direction_var.get()]
             self.pipeline.start_enrollment_pass(direction)
-            self.pass_status_var.set("Pass requested; stand ready for the warm-up countdown.")
-            self._update_pass_controls({"state": "enrollment_countdown"})
+            self._pass_action = "start"
+            self._pass_requested_at = time.time()
+            self._update_pass_controls()
         except Exception as exc:
             messagebox.showerror("Cannot start pass", str(exc), parent=self)
 
     def _end_enrollment_pass(self, discard: bool) -> None:
-        if self.pipeline is None:
+        if self.end_pass_button.instate(["disabled"]):
             return
         try:
             self.pipeline.end_enrollment_pass(discard=discard)
-            self.pass_status_var.set(
-                "Discarding current pass..." if discard else "Ending current pass..."
-            )
-            self.end_pass_button.configure(state="disabled")
-            self.discard_pass_button.configure(state="disabled")
+            self._pass_action = "end"
+            self._pass_requested_at = time.time()
+            self._update_pass_controls()
         except Exception as exc:
             messagebox.showerror("Cannot end pass", str(exc), parent=self)
 
     def _finish_enrollment_for_review(self) -> None:
+        if self.finish_review_button.instate(["disabled"]):
+            return
         if self._pending_review_result is not None:
             self._open_enrollment_review()
             return
-        if self.pipeline is None:
-            return
         try:
             self.pipeline.finish_enrollment_for_review()
-            self.finish_review_button.configure(state="disabled")
-            self.pass_status_var.set("Stopping capture and preparing pass review...")
+            self._pass_action = "finish"
+            self._pass_requested_at = time.time()
+            self._update_pass_controls()
         except Exception as exc:
             messagebox.showerror("Cannot finish enrollment", str(exc), parent=self)
 
@@ -1332,15 +1517,18 @@ class RealtimePage(ttk.Frame):
             self.sam_checkpoint_var.set(selected)
 
     def _check_device(self, check_access: bool = True) -> None:
-        # Counting USB devices alone can report ready even when another process
-        # owns the camera or Windows desktop-camera access is disabled.
-        status = probe_azure_kinect(check_access=check_access)
-        self.device_status = status
-        self.device_var_text.set(status.message)
-        if status.connected:
-            self.status_var.set("Azure Kinect DK is connected and ready")
-        else:
-            self.status_var.set(status.message)
+        if self._session_active or self._device_check_pending or self._pending_review_result is not None:
+            return
+        if self.camera_available is not None:
+            available, reason = self.camera_available()
+            if not available:
+                messagebox.showwarning("Kinect is busy", reason, parent=self)
+                return
+        self._device_check_pending = True
+        self.device_status = None
+        self.device_var_text.set(self.i18n.tr("workflow.starting.detail"))
+        self._set_running(False)
+        self.device_worker.start(lambda _progress: probe_azure_kinect(check_access=check_access))
 
     def _import_checkpoint(self) -> None:
         selected = filedialog.askopenfilename(
@@ -1386,6 +1574,8 @@ class RealtimePage(ttk.Frame):
     def start(self) -> None:
         """Start from a Tk callback without allowing silent UI failures."""
 
+        if self._session_active or self._stop_pending or self.commit_pending or self._device_check_pending:
+            return
         if self.camera_available is not None:
             available, reason = self.camera_available()
             if not available:
@@ -1396,7 +1586,7 @@ class RealtimePage(ttk.Frame):
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}"
             if self.pipeline is not None and self.pipeline.running:
-                self.pipeline.stop()
+                self.stop()
             self.status_var.set("Unable to start the realtime pipeline")
             self.result_var.set("Realtime startup failed")
             self.result_detail_var.set(detail)
@@ -1426,6 +1616,9 @@ class RealtimePage(ttk.Frame):
                 parent=self,
             )
             return False
+        self._refresh_readiness()
+        if self._readiness_blocker:
+            return self._reject_start(self.i18n.tr("workflow.readiness"), self._readiness_blocker)
         operation = self._operation()
         source_mode = self.source_labels[self.source_var.get()]
         self.status_var.set(
@@ -1458,7 +1651,7 @@ class RealtimePage(ttk.Frame):
         sam_checkpoint = self.sam_checkpoint_var.get().strip()
         if detector == "yolo_sam":
             try:
-                sam_checkpoint = resolve_sam_checkpoint(sam_checkpoint)
+                sam_checkpoint = resolve_sam_checkpoint_path(sam_checkpoint)
             except (FileNotFoundError, ValueError) as exc:
                 return self._reject_start("Invalid SAM model", str(exc))
         replay = Path(self.replay_path_var.get()).expanduser()
@@ -1560,9 +1753,17 @@ class RealtimePage(ttk.Frame):
             ),
         )
         self._pending_review_result = None
+        self._pass_result = {}
+        self._review_choices = {}
+        self._pass_action = None
+        self._capture_ready = False
+        self._last_snapshot = None
+        self.buffer_progress.configure(value=0, maximum=config.clip_len)
+        self._fill_candidates(None)
         self._update_pass_tree([])
         self.pipeline = RealtimePipeline(self.controller, config)
         self.pipeline.start()
+        self._session_active = True
         self._set_running(True)
         self.status_var.set(
             "Enrollment session starting; wait for ready, then start a one-way pass"
@@ -1572,123 +1773,99 @@ class RealtimePage(ttk.Frame):
         if operation == "enroll":
             self.result_var.set("Guided enrollment session started")
             self.result_detail_var.set("Gallery is unchanged until selected passes are committed")
-            self._update_pass_controls({"state": "enrollment_paused"})
+            self._update_pass_controls()
         return True
 
     def stop(self) -> None:
-        was_running = self.pipeline is not None and self.pipeline.running
-        was_enrollment = bool(
-            was_running and self.pipeline is not None and self.pipeline.operation == "enroll"
-        )
-        if self.pipeline is not None:
-            self.pipeline.stop()
-        self._set_running(False)
-        if was_enrollment:
-            self.status_var.set("Realtime enrollment cancelled; Gallery was not modified")
-            self.result_var.set("Enrollment cancelled")
-            self.result_detail_var.set("No Gallery embeddings were written")
-            self.enrollment_progress_var.set("-")
-            self._update_pass_tree()
-        elif was_running:
-            self.status_var.set("Realtime recognition stopped")
+        if self._stop_pending or self.commit_pending:
+            return
+        if self.pipeline is None or not self.pipeline.running:
+            return
+        self._stop_pending = True
+        self._capture_ready = False
+        self.status_var.set(self.i18n.tr("workflow.stopping"))
+        self.result_var.set(self.i18n.tr("workflow.stopping"))
+        self.stop_button.configure(state="disabled")
+        self._update_pass_controls()
+        pipeline = self.pipeline
+        self.stop_worker.start(lambda _progress: pipeline.stop())
 
     def close(self) -> None:
-        self.stop()
+        if self._readiness_after is not None:
+            self.after_cancel(self._readiness_after)
+            self._readiness_after = None
+        if self.pipeline is not None:
+            self.pipeline.stop()
         if (self.pipeline is not None and not self.pipeline.running
                 and self._pending_review_result is not None and not self.commit_pending):
             self.pipeline.abandon_enrollment()
             self._pending_review_result = None
 
     def _poll(self) -> None:
+        for message in self.device_worker.drain():
+            self._device_check_pending = False
+            if message.kind == "result":
+                self.device_status = message.payload
+                self.device_var_text.set(message.payload.message)
+            elif message.kind == "error":
+                self.device_var_text.set(message.payload["message"])
+            self._set_running(self._session_active)
+            self._refresh_readiness()
+        for message in self.stop_worker.drain():
+            if message.kind == "error":
+                self.status_var.set(message.payload["message"])
         if self.pipeline is not None:
             snapshot = self.pipeline.poll_latest()
-            if snapshot is not None:
+            if snapshot is not None and not self._stop_pending:
                 self._show_snapshot(snapshot)
                 if snapshot.state in {
-                    "error",
-                    "complete",
-                    "enrolled",
-                    "enrollment_failed",
-                    "enrollment_review",
+                    "error", "complete", "enrolled", "enrollment_failed", "enrollment_review",
                 }:
+                    self._capture_ready = False
+                    self._pass_action = None
                     if snapshot.state == "enrollment_review":
                         self._pending_review_result = dict(snapshot.result or {})
-                    self._set_running(False)
-                    if snapshot.state == "enrolled":
-                        self._refresh_gallery_summary()
-                    elif snapshot.state == "enrollment_review":
-                        self._update_pass_tree(
-                            list(self._pending_review_result.get("passes", []))
-                        )
-                        self._update_pass_controls(self._pending_review_result)
-                        self.after(20, self._open_enrollment_review)
+                    self._update_pass_controls(snapshot.result)
+            # A terminal snapshot can precede the worker's source cleanup.
+            if self._session_active and not self.pipeline.running and not self.stop_worker.busy:
+                stopped = self._stop_pending
+                self._stop_pending = False
+                self._session_active = False
+                self._capture_ready = False
+                self._pass_action = None
+                if stopped:
+                    self._pass_result = {}
+                    self._update_pass_tree([])
+                self._set_running(False)
+                if stopped:
+                    self.status_var.set(self.i18n.tr("workflow.stopped"))
+                    self.result_var.set(self.i18n.tr("workflow.stopped"))
+                    self.result_detail_var.set(self.i18n.tr("No Gallery embeddings were written")
+                                               if self.pipeline.operation == "enroll" else "")
+                if self._pending_review_result is not None:
+                    self._update_pass_tree(list(self._pending_review_result.get("passes", [])))
+                    self._update_pass_controls(self._pending_review_result)
+                    self.after(20, self._open_enrollment_review)
+                self._refresh_gallery_summary()
         self.after(50, self._poll)
 
     def _set_running(self, running: bool) -> None:
-        if running:
-            self.start_button.configure(state="disabled")
-            self.stop_button.configure(state="normal")
-            self.recognize_radio.configure(state="disabled")
-            self.enroll_radio.configure(state="disabled")
-            self.source_combo.configure(state="disabled")
-            self.detector_combo.configure(state="disabled")
-            self.bundle_combo.configure(state="disabled")
-            self.clip_len_combo.configure(state="disabled")
-            for widget in [
-                *self.enrollment_entries,
-                self.enrollment_duration_spin,
-                self.enrollment_warmup_spin,
-                self.enrollment_min_spin,
-                self.enrollment_max_spin,
-                self.allow_multi_enrollment_check,
-                self.save_foreground_check,
-                self.autofill_button,
-                self.replay_entry,
-                self.replay_button,
-                self.yolo_entry,
-                self.yolo_button,
-                self.sam_entry,
-                self.sam_button,
-                self.sam_refresh_spin,
-                self.check_device_button,
-                self.threshold_spin,
-                self.margin_spin,
-                self.loop_check,
-            ]:
-                widget.configure(state="disabled")
-            self._update_pass_controls()
-            return
-        self.start_button.configure(
-            state="disabled" if self._pending_review_result is not None else "normal"
-        )
-        self.stop_button.configure(state="disabled")
-        self.recognize_radio.configure(state="normal")
-        self.enroll_radio.configure(state="normal")
-        self.source_combo.configure(state="readonly")
-        self.detector_combo.configure(state="readonly")
-        self.bundle_combo.configure(state="readonly")
-        self.clip_len_combo.configure(state="readonly")
-        for widget in [
-            *self.enrollment_entries,
-            self.enrollment_duration_spin,
-            self.enrollment_warmup_spin,
-            self.enrollment_min_spin,
-            self.enrollment_max_spin,
-            self.allow_multi_enrollment_check,
-            self.save_foreground_check,
-        ]:
-            widget.configure(state="normal")
-        self.save_foreground_check.configure(
-            state="disabled" if self._pending_review_result is not None else "normal")
-        self.check_device_button.configure(state="normal")
-        self._source_changed()
-        self._operation_changed(reset_result=False)
-        self._update_pass_controls(self._pending_review_result)
+        busy = (running or self._session_active or self._stop_pending or self.commit_pending
+                or self._device_check_pending or self._pending_review_result is not None)
+        self._config_lock.set_locked(busy)
+        self.start_button.configure(state="disabled" if busy else "normal")
+        self.stop_button.configure(
+            state="normal" if running and not self._stop_pending else "disabled")
+        self._update_pass_controls()
+        self._schedule_readiness()
 
     def _show_snapshot(self, snapshot: PipelineSnapshot) -> None:
         if snapshot.device_status is not None:
+            changed = self.device_status != snapshot.device_status
             self.device_status = snapshot.device_status
             self.device_var_text.set(snapshot.device_status.message)
+            if changed:
+                self._schedule_readiness()
         elif (
             snapshot.state == "error"
             and self.source_labels.get(self.source_var.get()) == "azure_kinect"
@@ -1716,93 +1893,20 @@ class RealtimePage(ttk.Frame):
             if snapshot.operation == "enroll"
             else "-"
         )
-        result = snapshot.result
+        if snapshot.frame_index >= 0 and snapshot.state not in {
+                "error", "complete", "enrolled", "enrollment_failed", "enrollment_review"}:
+            self._capture_ready = True
+        self._render_feedback(snapshot)
         if snapshot.operation == "enroll":
-            passes = list((result or {}).get("passes", []))
+            passes = list((snapshot.result or {}).get("passes", []))
             if passes:
                 self._update_pass_tree(passes)
+            result = snapshot.result if snapshot.timestamp >= self._pass_requested_at else None
             self._update_pass_controls(result)
-        if result is None:
-            if snapshot.state == "starting":
-                self.result_var.set("Starting realtime pipeline")
-                self.result_detail_var.set(
-                    "Checking the source before loading detector and gait model"
-                )
-            elif snapshot.state == "source_ready":
-                self.result_var.set("Realtime source is ready")
-                self.result_detail_var.set(
-                    "Loading detector and gait model in the background"
-                )
-            elif snapshot.state == "complete":
-                self.result_var.set("Replay complete")
-                self.result_detail_var.set(snapshot.message)
-            elif snapshot.state == "error":
-                self.result_var.set("Realtime pipeline error")
-                self.result_detail_var.set(snapshot.message)
-            else:
-                self.result_var.set("Detecting and collecting gait frames")
-                self.result_detail_var.set(
-                    f"state={snapshot.state} | frame={snapshot.frame_index} | "
-                    f"preprocess={snapshot.preprocessing_ms:.1f} ms"
-                )
-        elif result.get("operation") == "enroll":
-            state = str(result.get("state", snapshot.state))
-            name = str(result.get("display_name", ""))
-            if state == "enrolled":
-                self.result_var.set(f"Enrollment complete: {name}")
-                self.result_detail_var.set(
-                    f"stored={result.get('stored_embeddings', 0)} | "
-                    f"captured={result.get('captured_embeddings', 0)} | "
-                    f"coherence={float(result.get('embedding_coherence', 0.0)):.3f}"
-                )
-            elif state == "enrollment_failed":
-                self.result_var.set("Enrollment not saved")
-                self.result_detail_var.set(str(result.get("error", snapshot.message)))
-            elif state == "enrollment_countdown":
-                self.result_var.set(f"Prepare to walk: {name}")
-                self.result_detail_var.set(
-                    f"starts in {float(result.get('warmup_remaining_s', 0.0)):.1f}s"
-                )
-            elif state == "enrollment_paused":
-                self.result_var.set(f"Enrollment session ready: {name}")
-                self.result_detail_var.set(
-                    "Choose a one-way direction and press Start pass; Gallery is unchanged"
-                )
-            elif state == "enrollment_review":
-                self.result_var.set(f"Review captured passes: {name}")
-                self.result_detail_var.set(
-                    f"usable passes={result.get('usable_passes', 0)} | "
-                    f"captured embeddings={result.get('captured_embeddings', 0)} | not committed"
-                )
-            else:
-                self.result_var.set(f"Registering: {name}")
-                self.result_detail_var.set(
-                    f"elapsed={float(result.get('elapsed_s', 0.0)):.1f}/"
-                    f"{float(result.get('duration_s', 0.0)):.1f}s | "
-                    f"embeddings={result.get('captured_embeddings', 0)}/"
-                    f"min {result.get('min_embeddings', 0)}"
-                )
-        else:
-            candidate_name = str(
-                result.get("candidate_display_name")
-                or result.get("display_name", "Unknown")
-            )
-            accepted = bool(result.get("accepted"))
-            self.result_var.set(
-                str(result.get("display_name", "Unknown"))
-                if accepted
-                else (f"Pending (candidate: {candidate_name})"
-                      if result.get("state") == "accumulating"
-                      else f"Unknown (candidate: {candidate_name})")
-            )
-            self.result_detail_var.set(
-                f"state={result.get('state')} | similarity="
-                f"{float(result.get('similarity', 0.0)):.3f} | "
-                f"margin={float(result.get('similarity_margin') or 0.0):.3f} | "
-                f"stability={result.get('stability_count', 0)}/"
-                f"{result.get('stability_required', 0)}"
-            )
-        self._fill_candidates(result)
+        visible_result = snapshot.result if snapshot.state not in {
+            "starting", "source_ready", "waiting_person", "multiple_people",
+            "insufficient_points", "error", "complete"} else None
+        self._fill_candidates(visible_result)
         self._show_images(snapshot)
 
     def _open_enrollment_review(self) -> None:
@@ -1825,11 +1929,12 @@ class RealtimePage(ttk.Frame):
         window.protocol("WM_DELETE_WINDOW", self._close_enrollment_review)
 
         name = str(result.get("display_name", ""))
-        ttk.Label(
+        self._review_title_var = tk.StringVar(value=self.i18n.tr("workflow.review_title", name=name))
+        WrappedLabel(
             window,
-            text=f"Review before Gallery commit: {name}",
+            textvariable=self._review_title_var,
             style="Result.TLabel",
-        ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 4))
+        ).grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 4))
         ttk.Label(
             window,
             text=(
@@ -1864,7 +1969,8 @@ class RealtimePage(ttk.Frame):
             selectable = bool(
                 item.get("selectable", not item.get("discarded") and int(item.get("embedding_count", 0)) > 0)
             )
-            variable = tk.BooleanVar(value=recommended)
+            variable = tk.BooleanVar(value=selectable and self._review_choices.get(pass_id, recommended))
+            variable.trace_add("write", lambda *_args: self._update_review_controls())
             self._review_selection_vars[pass_id] = variable
             ttk.Checkbutton(
                 table,
@@ -1899,8 +2005,15 @@ class RealtimePage(ttk.Frame):
                 row=1, column=0, columnspan=7, sticky="w", pady=8
             )
 
+        self._review_status_var = tk.StringVar()
+        summary = ttk.Frame(window, padding=(16, 4))
+        summary.grid(row=3, column=0, sticky="ew")
+        summary.columnconfigure(0, weight=1)
+        WrappedLabel(summary, textvariable=self._review_status_var).grid(row=0, column=0, sticky="ew")
+        self._review_progress = ttk.Progressbar(summary, mode="indeterminate")
+        self._review_progress.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         actions = ttk.Frame(window, padding=(16, 12))
-        actions.grid(row=3, column=0, sticky="ew")
+        actions.grid(row=4, column=0, sticky="ew")
         actions.columnconfigure(0, weight=1)
         ttk.Button(
             actions,
@@ -1917,18 +2030,36 @@ class RealtimePage(ttk.Frame):
             text="Close (reopen in this app)",
             command=self._close_enrollment_review,
         ).grid(row=0, column=3, padx=(8, 0))
-        ttk.Button(
+        self._review_commit_button = ttk.Button(
             actions,
             text="Commit selected passes",
             style="Accent.TButton",
             command=self._commit_enrollment_review,
-        ).grid(row=0, column=4, padx=(8, 0))
+        )
+        self._review_commit_button.grid(row=0, column=4, padx=(8, 0))
+        self._review_lock = ControlLock(form_controls(window))
+        self._update_review_controls()
         self.i18n.apply(window)
+
+    def _update_review_controls(self) -> None:
+        if self._review_window is None or not self._review_window.winfo_exists():
+            return
+        selected = {key for key, variable in self._review_selection_vars.items() if variable.get()}
+        count = sum(int(item.get("embedding_count", 0))
+                    for item in (self._pending_review_result or {}).get("passes", [])
+                    if item.get("pass_id") in selected)
+        self._review_lock.set_locked(self.commit_pending)
+        self._review_commit_button.configure(state="normal" if selected and not self.commit_pending else "disabled")
+        self._review_status_var.set(self.i18n.tr("sources.committing") if self.commit_pending else
+            self.i18n.tr("workflow.review_selection", passes=len(selected), count=count))
+        self._review_title_var.set(self.i18n.tr("workflow.review_title",
+            name=(self._pending_review_result or {}).get("display_name", "")))
 
     def _close_enrollment_review(self) -> None:
         if self.commit_pending:
             return
         if self._review_window is not None:
+            self._review_choices = {key: variable.get() for key, variable in self._review_selection_vars.items()}
             self._review_window.destroy()
         self._review_window = None
         self._review_selection_vars = {}
@@ -1949,6 +2080,11 @@ class RealtimePage(ttk.Frame):
             return
         self._pending_review_result = None
         self._close_enrollment_review()
+        self._session_active = True
+        self._capture_ready = False
+        self._pass_action = None
+        self._pass_result = {}
+        self._last_snapshot = None
         self._set_running(True)
         self.status_var.set(
             "Enrollment session resumed; existing passes and embeddings were kept"
@@ -1957,7 +2093,7 @@ class RealtimePage(ttk.Frame):
         self.result_detail_var.set(
             "Choose a direction and press Start pass; Gallery is still unchanged"
         )
-        self._update_pass_controls({"state": "enrollment_paused"})
+        self._update_pass_controls()
 
     def _commit_enrollment_review(self) -> None:
         if self.commit_pending:
@@ -1969,6 +2105,9 @@ class RealtimePage(ttk.Frame):
             for pass_id, variable in self._review_selection_vars.items()
             if variable.get()
         ]
+        if not selected:
+            messagebox.showwarning("Gallery", self.i18n.tr("workflow.select_pass"), parent=self._review_window)
+            return
         passes_by_id = {
             str(item.get("pass_id", "")): item
             for item in list((self._pending_review_result or {}).get("passes", []))
@@ -1990,6 +2129,9 @@ class RealtimePage(ttk.Frame):
         pipeline = self.pipeline
         self.commit_pending = True
         self.status_var.set(self.i18n.tr("sources.committing"))
+        self._update_review_controls()
+        self._review_progress.start(12)
+        self._set_running(False)
         self.commit_worker.start(lambda _progress: pipeline.commit_enrollment(selected))
         self.after(100, self._poll_commit)
 
@@ -1997,12 +2139,16 @@ class RealtimePage(ttk.Frame):
         for message in self.commit_worker.drain():
             if message.kind == "error":
                 self.commit_pending = False
+                self._review_progress.stop()
+                self._update_review_controls()
+                self._update_pass_controls()
                 self.status_var.set(message.payload["message"])
                 messagebox.showerror("Gallery commit failed", message.payload["message"],
                                      parent=self._review_window)
                 return
             if message.kind == "result":
                 self.commit_pending = False
+                self._review_progress.stop()
                 self._enrollment_committed(message.payload)
                 return
         self.after(100, self._poll_commit)
@@ -2010,6 +2156,7 @@ class RealtimePage(ttk.Frame):
     def _enrollment_committed(self, result: dict[str, Any]) -> None:
         self._pending_review_result = None
         self._close_enrollment_review()
+        self._review_choices = {}
         self._refresh_gallery_summary()
         if self.on_gallery_changed is not None:
             self.on_gallery_changed()
@@ -2048,6 +2195,7 @@ class RealtimePage(ttk.Frame):
             return
         self._pending_review_result = None
         self._close_enrollment_review()
+        self._review_choices = {}
         self.status_var.set("Enrollment session abandoned; Gallery was not modified")
         self.result_var.set("Enrollment abandoned")
         self.result_detail_var.set("No embeddings were written to Gallery")

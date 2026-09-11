@@ -341,6 +341,8 @@ class GaitIdentityWindow:
         if self._source_operation_running():
             return False, "Enrollment source operation in progress."
         realtime = getattr(self, "realtime_page", None)
+        if getattr(realtime, "_device_check_pending", False) or getattr(realtime, "_stop_pending", False):
+            return False, self.i18n.tr("workflow.busy")
         pipeline = getattr(realtime, "pipeline", None)
         if pipeline is not None and pipeline.running:
             return False, "請先停止即時辨識／註冊，再開始效率測試。"
@@ -353,6 +355,8 @@ class GaitIdentityWindow:
         for name in ("realtime_page", "performance_page"):
             pipeline = getattr(getattr(self, name, None), "pipeline", None)
             running = running or (pipeline is not None and pipeline.running)
+        realtime = getattr(self, "realtime_page", None)
+        running = running or getattr(realtime, "_device_check_pending", False) or getattr(realtime, "_stop_pending", False)
         pending = getattr(getattr(self, "realtime_page", None), "_pending_review_result", None)
         if pending is not None:
             return False, self.i18n.tr("gallery.finish_before_edit")
@@ -1139,6 +1143,7 @@ class GaitIdentityWindow:
             return
         note = self.note_text.get("1.0", "end").strip()
         bundle_id = self._bundle_id()
+        device = self.device_var.get()
 
         def task(progress: Callable[[str], None]) -> OperationOutcome:
             return self.controller.enroll_many(
@@ -1147,13 +1152,16 @@ class GaitIdentityWindow:
                 person_id=person_id,
                 display_name=display_name,
                 note=note,
-                device=self.device_var.get(),
+                device=device,
                 progress=progress,
             )
 
         self._start_task("人物註冊", task)
 
     def _start_recognize(self) -> None:
+        if self.worker.busy or self._source_operation_running():
+            messagebox.showinfo("Please wait", self.i18n.tr("workflow.busy"), parent=self.root)
+            return
         source = self._validated_recognition_source()
         if source is None:
             return
@@ -1168,13 +1176,24 @@ class GaitIdentityWindow:
             return
         bundle_id = self._bundle_id()
 
+        try:
+            gallery = self.controller.database_summary(bundle_id)
+            if not gallery.get("active_embeddings", 0):
+                self.status_var.set(self.i18n.tr("workflow.no_gallery"))
+                messagebox.showwarning("Gallery", self.i18n.tr("workflow.no_gallery.detail"), parent=self.root)
+                return
+        except Exception as exc:
+            messagebox.showerror("Gallery", str(exc), parent=self.root)
+            return
+
+        device = self.device_var.get()
         def task(progress: Callable[[str], None]) -> OperationOutcome:
             return self.controller.recognize(
                 source=source,
                 bundle_id=bundle_id,
                 threshold=threshold,
                 min_margin=margin,
-                device=self.device_var.get(),
+                device=device,
                 progress=progress,
             )
 
@@ -1648,6 +1667,8 @@ class GaitIdentityWindow:
 
     def _close(self) -> None:
         if (getattr(getattr(self, "realtime_page", None), "commit_pending", False)
+                or getattr(getattr(self, "realtime_page", None), "_device_check_pending", False)
+                or getattr(getattr(self, "realtime_page", None), "_stop_pending", False)
                 or self._source_operation_running()):
             messagebox.showwarning("Please wait", self.i18n.tr("sources.committing"), parent=self.root)
             return

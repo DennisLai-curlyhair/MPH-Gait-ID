@@ -325,6 +325,8 @@ class RealtimeUiStartupTest(unittest.TestCase):
 
     def test_azure_start_does_not_probe_device_on_tk_callback(self) -> None:
         page = object.__new__(RealtimePage)
+        page._refresh_readiness = lambda: None
+        page._readiness_blocker = ""
         page._pending_review_result = None
         page.pipeline = None
         page._operation = lambda: "enroll"  # type: ignore[method-assign]

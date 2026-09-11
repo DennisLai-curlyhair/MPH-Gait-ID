@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 
 from ..source_registration import RegistrationTarget
 from .scrollable import ScrollableFrame
+from .layout import WrappedLabel
 
 
 class SourceRegistrationDialog(tk.Toplevel):
@@ -81,11 +82,36 @@ class SourceRegistrationDialog(tk.Toplevel):
         output.grid(row=1, column=0, sticky="nsew")
         output.columnconfigure(0, weight=1)
         output.rowconfigure(0, weight=1)
-        self.log = tk.Text(output, height=8, wrap="word", state="disabled")
+        notebook = ttk.Notebook(output)
+        self.notebook = notebook
+        notebook.grid(row=0, column=0, sticky="nsew")
+        results = ttk.Frame(notebook)
+        logs = ttk.Frame(notebook)
+        notebook.add(results, text=self._t("各模型結果", "Model results"))
+        notebook.add(logs, text=self._t("執行紀錄", "Activity log"))
+        for host in (results, logs):
+            host.columnconfigure(0, weight=1)
+            host.rowconfigure(0, weight=1)
+        self.result_tree = ttk.Treeview(results, columns=("model", "length", "state", "count"),
+                                       show="headings", height=6)
+        for key, title, width in (
+            ("model", self._t("模型", "Model"), 300), ("length", "T", 50),
+            ("state", self._t("狀態", "Status"), 170), ("count", self._t("新增特徵", "Added embeddings"), 130)):
+            self.result_tree.heading(key, text=title)
+            self.result_tree.column(key, width=width, minwidth=50)
+        vertical = ttk.Scrollbar(results, command=self.result_tree.yview)
+        horizontal = ttk.Scrollbar(results, orient="horizontal", command=self.result_tree.xview)
+        self.result_tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        self.result_tree.grid(row=0, column=0, sticky="nsew")
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
+        self.log = tk.Text(logs, height=8, wrap="word", state="disabled")
         self.log.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(output, command=self.log.yview)
+        scrollbar = ttk.Scrollbar(logs, command=self.log.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.log.configure(yscrollcommand=scrollbar.set)
+        self.status = tk.StringVar(value=self._t("選取來源片段與目標模型", "Select source passes and target models"))
+        WrappedLabel(output, textvariable=self.status).grid(row=1, column=0, sticky="ew", pady=(6, 0))
         self.bar = ttk.Progressbar(self, mode="indeterminate")
         self.bar.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
         commands = ttk.Frame(self, padding=10)
@@ -160,6 +186,11 @@ class SourceRegistrationDialog(tk.Toplevel):
         self.start_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self.bar.start(12)
+        self.status.set(self._t("準備註冊，尚未儲存特徵", "Preparing enrollment; no embeddings saved yet"))
+        self.result_tree.delete(*self.result_tree.get_children())
+        for target in targets:
+            self.result_tree.insert("", "end", values=(target.bundle_id, target.clip_len,
+                                    self._t("待處理", "Pending"), 0))
         self._append(self._t("開始重新編碼...", "Starting re-encoding..."))
         self.worker.start(lambda progress: self.controller.register_from_source(
             self.source_id, targets, passes, device=device, max_windows_per_pass=maximum,
@@ -169,12 +200,15 @@ class SourceRegistrationDialog(tk.Toplevel):
     def cancel(self):
         self.cancel_event.set()
         self.cancel_button.configure(state="disabled")
+        self.status.set(self._t("取消中，等待目前推論完成", "Cancelling; waiting for current inference"))
         self._append(self._t("取消中，等待目前推論完成...", "Cancelling after the current inference call..."))
 
     def poll(self):
         self.after_id = None
         for message in self.worker.drain():
             if message.kind == "progress":
+                if not self.cancel_event.is_set():
+                    self.status.set(str(message.payload))
                 self._append(message.payload)
                 continue
             self.running = False
@@ -183,9 +217,24 @@ class SourceRegistrationDialog(tk.Toplevel):
             self.start_button.configure(state="normal" if self.owner_available else "disabled")
             self.cancel_button.configure(state="disabled")
             if message.kind == "error":
+                self.status.set(self._t("工作失敗，未新增特徵", "Job failed; no embeddings added"))
+                for row in self.result_tree.get_children():
+                    self.result_tree.set(row, "state", self._t("未儲存", "Not saved"))
                 self._append(self._t("未新增任何 Gallery 特徵：", "No Gallery embeddings added: ") + message.payload["message"])
             else:
                 report = message.payload
+                states = {
+                    "completed": self._t("完成", "Completed"), "registered": self._t("已註冊", "Registered"),
+                    "cancelled": self._t("已取消", "Cancelled"), "failed": self._t("失敗", "Failed"),
+                    "skipped": self._t("略過，未新增", "Skipped; no additions"),
+                    "not_saved": self._t("未儲存", "Not saved"), "pending": self._t("未執行", "Not run"),
+                }
+                self.status.set(f'{states.get(report["status"], report["status"])} | '
+                                + self._t("新增特徵：", "Embeddings added: ") + str(report["embeddings_added"]))
+                self.result_tree.delete(*self.result_tree.get_children())
+                for target in report["targets"]:
+                    self.result_tree.insert("", "end", values=(target["bundle_id"], target["clip_len"],
+                        states.get(target["status"], target["status"]), target["embeddings_added"]))
                 self._append(f'{report["status"]}: {report["embeddings_added"]} embeddings | job {report["job_id"]}')
                 for target in report["targets"]:
                     self._append(f'{target["bundle_id"]}, T={target["clip_len"]}: {target["status"]}, '

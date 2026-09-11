@@ -117,7 +117,12 @@ class GalleryTransferDialog(tk.Toplevel):
 
     def _start(self, operation: str, task: Callable) -> None:
         self.operation = operation
-        self.status.set(self.tr("Checking / processing Gallery...", "正在檢查／處理 Gallery…"))
+        labels = {
+            "preview": self.tr("Verifying Gallery package; no data imported", "正在驗證 Gallery 資料包，尚未匯入"),
+            "export": self.tr("Packaging Gallery embeddings", "正在打包 Gallery 特徵"),
+            "import": self.tr("Importing Gallery; waiting for transaction completion", "正在匯入 Gallery，等待交易完成"),
+        }
+        self.status.set(labels[operation])
         self.apply_button.configure(state="disabled")
         self.restore_check.configure(state="disabled")
         for button in self.edit_buttons:
