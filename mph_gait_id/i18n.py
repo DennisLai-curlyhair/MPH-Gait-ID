@@ -32,15 +32,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "MPH-Gait ID",
     },
     "language": {"zh_TW": "語言", "en": "Language"},
-    "nav.offline": {"zh_TW": "離線註冊／辨識", "en": "Offline registration / recognition"},
-    "nav.realtime": {"zh_TW": "Azure Kinect 即時模式", "en": "Real-time Azure Kinect"},
+    "nav.offline": {"zh_TW": "離線模式", "en": "Offline"},
+    "nav.realtime": {"zh_TW": "即時模式", "en": "Real-time"},
     "nav.gallery": {"zh_TW": "Gallery 管理", "en": "Gallery Manager"},
-    "nav.benchmark": {"zh_TW": "即時效率測試", "en": "Live Performance Benchmark"},
+    "nav.benchmark": {"zh_TW": "效能測試", "en": "Performance"},
+    "benchmark.title": {"zh_TW": "即時效率測試", "en": "Live Performance Benchmark"},
     "model.management": {"zh_TW": "模型管理", "en": "Model management"},
     "model.input_type": {"zh_TW": "輸入類型", "en": "Input type"},
     "model.method": {"zh_TW": "模型方法", "en": "Model method"},
     "model.bundle": {"zh_TW": "權重 / Bundle", "en": "Checkpoint / Bundle"},
     "model.import": {"zh_TW": "匯入權重", "en": "Import checkpoint"},
+    "model.configuration_source": {"zh_TW": "參數來源", "en": "Configuration"},
+    "model.checkpoint_path": {"zh_TW": "權重", "en": "Checkpoint"},
+    "source.folder_requirement": {"zh_TW": "點雲：可選 sequence 或人物資料夾（自動尋找 clear_data_*.npy）", "en": "Point clouds: sequence or person folder (clear_data_*.npy)."},
+    "source.folder_count": {"zh_TW": "已加入 {count} 個來源，選取 {selected} 個。", "en": "{count} sources, {selected} selected."},
+    "source.folder_empty": {"zh_TW": "尚未加入來源。", "en": "No sources added."},
+    "gallery.offline_summary": {"zh_TW": "目前模型: {persons} 人 / {embeddings} 個特徵 | 全部模型: {all_persons} 人 / {all_embeddings} 個特徵", "en": "Current model: {persons} people / {embeddings} embeddings | All models: {all_persons} people / {all_embeddings} embeddings"},
     "rescan": {"zh_TW": "重新掃描", "en": "Rescan"},
     "refresh": {"zh_TW": "重新整理", "en": "Refresh"},
     "browse": {"zh_TW": "瀏覽", "en": "Browse"},
@@ -239,9 +246,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Identity note (clothing and sequence conditions are recorded automatically)",
     },
     "source.autofill": {"zh_TW": "從來源自動填入", "en": "Autofill from source"},
-    "candidate.people": {"zh_TW": "候選人物", "en": "Identity candidates"},
-    "window.results": {"zh_TW": "逐視窗結果", "en": "Per-window results"},
-    "session.history": {"zh_TW": "工作階段歷史", "en": "Session history"},
+    "candidate.people": {"zh_TW": "候選人物", "en": "Candidates"},
+    "window.results": {"zh_TW": "逐視窗結果", "en": "Windows"},
+    "session.history": {"zh_TW": "工作階段歷史", "en": "History"},
     "run.log": {"zh_TW": "執行紀錄", "en": "Run log"},
     "result.load": {"zh_TW": "載入選取結果", "en": "Load selected result"},
     "gallery.manage_person": {"zh_TW": "管理選取人物", "en": "Manage selected identity"},
@@ -361,6 +368,7 @@ class I18n:
             else requested if requested in SUPPORTED_LOCALES else "en"
         )
         self._aliases: dict[str, str] = {}
+        self._ui_variables: set[str] = set()
         for key, translations in MESSAGES.items():
             self._aliases[key] = key
             for value in translations.values():
@@ -400,14 +408,23 @@ class I18n:
             label for label, value in LANGUAGE_CHOICES.items() if value == self.locale
         )
 
+    def register_ui_variables(self, *variables: tk.Variable) -> None:
+        """Opt in status variables only. Identity names and paths are user data."""
+        self._ui_variables.update(str(variable) for variable in variables)
+
     def apply(self, root: tk.Misc) -> None:
         self._apply_widget(root)
         for child in root.winfo_children():
             self.apply(child)
 
     def _apply_widget(self, widget: tk.Misc) -> None:
+        from .ui.layout import reserve_heading_width, reserve_text_width
+
         try:
             current = str(widget.cget("text"))
+            key = self._aliases.get(current)
+            if key:
+                reserve_text_width(widget, tuple(MESSAGES[key].values()))
             translated = self.tr(current)
             if translated != current:
                 widget.configure(text=translated)
@@ -416,7 +433,7 @@ class I18n:
         if isinstance(widget, ttk.Label):
             try:
                 variable_name = str(widget.cget("textvariable"))
-                if variable_name:
+                if variable_name in self._ui_variables:
                     current = str(widget.getvar(variable_name))
                     translated = self.tr(current)
                     if translated != current:
@@ -424,14 +441,31 @@ class I18n:
             except tk.TclError:
                 pass
         if isinstance(widget, ttk.Notebook):
+            import math
+            from tkinter import font as tkfont
+
+            style = ttk.Style(widget)
+            if not hasattr(widget, "_bilingual_style"):
+                base = str(widget.cget("style")) or "TNotebook"
+                widget._bilingual_style = f"Bilingual{widget.winfo_id()}.{base}"
+                widget.configure(style=widget._bilingual_style)
+            font = tkfont.Font(root=widget, font=style.lookup(f"{widget._bilingual_style}.Tab", "font") or "TkDefaultFont")
+            captions = []
             for tab_id in widget.tabs():
                 current = str(widget.tab(tab_id, "text"))
+                key = self._aliases.get(current)
+                captions.extend(MESSAGES[key].values() if key else (current,))
                 widget.tab(tab_id, text=self.tr(current))
+            if captions:
+                width = math.ceil(max(font.measure(text) for text in captions) / max(1, font.measure("0")))
+                style.configure(f"{widget._bilingual_style}.Tab", width=width, anchor="center")
         if isinstance(widget, ttk.Treeview):
             columns = ["#0", *list(widget.cget("columns"))]
             for column in columns:
                 try:
                     current = str(widget.heading(column, "text"))
+                    key = self._aliases.get(current)
+                    reserve_heading_width(widget, column, tuple(MESSAGES[key].values()) if key else (current,))
                     widget.heading(column, text=self.tr(current))
                 except tk.TclError:
                     pass

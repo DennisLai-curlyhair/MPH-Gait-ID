@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### UI
+- Reserve bilingual control/tab widths and table-heading space; wrap long status
+  text and add scrolling for narrow settings and preview tool panels.
+- Add resizable Realtime sidebar and useful minimum areas for Offline previews
+  and Performance results; keep benchmark actions outside scrolling settings.
+- Switch languages without changing person data, model settings, or running jobs.
+- Preserve source pass/frame/zoom and surviving selections on refresh; pause
+  playback on tab exit without resetting position.
+- Preserve Gallery person/pass selection and scroll position using logical pass
+  identity, not row numbers. Revisit model pages without reapplying unchanged
+  bundle defaults; changed checkpoints/configurations still refresh defaults.
+- Add presentation/state regression tests and bilingual local acceptance guides.
+
 ### Added
 - Stage D foreground-source export/import using versioned `.mphsources` archives,
   with multi-source selection, verified previews, explicit person mapping, and

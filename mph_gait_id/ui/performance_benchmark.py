@@ -1,4 +1,5 @@
 from __future__ import annotations
+from copy import deepcopy
 
 import csv
 import json
@@ -22,6 +23,8 @@ from ..realtime.detection import (
 )
 from ..realtime.pipeline import RealtimeConfig, RealtimePipeline
 from ..realtime.types import PipelineSnapshot
+from .layout import SplitPane, WrappedLabel
+from .scrollable import ScrollableFrame
 
 
 def _number(value: Any, digits: int = 1) -> str:
@@ -97,6 +100,7 @@ class PerformanceBenchmarkPage(ttk.Frame):
         self.phase_var = tk.StringVar(value="Idle")
         self.progress_text_var = tk.StringVar(value="0 / 60 s")
         self.gallery_var = tk.StringVar(value="Current model Gallery: -")
+        self.i18n.register_ui_variables(self.status_var, self.phase_var, self.gallery_var)
         self.current_values: dict[str, tk.StringVar] = {
             "pipeline": tk.StringVar(value="0.0 FPS"),
             "valid": tk.StringVar(value="0.0 FPS"),
@@ -128,23 +132,29 @@ class PerformanceBenchmarkPage(ttk.Frame):
             style="Header.TLabel",
         )
         self.title_label.grid(row=0, column=0, sticky="w")
-        self.privacy_label = ttk.Label(
+        self.privacy_label = WrappedLabel(
             header,
             text=self._tr(
                 "只保存數值統計，不保存 RGB、深度、點雲或特徵",
                 "Numeric telemetry only; RGB, depth, point clouds, and embeddings are not saved",
             ),
         )
-        self.privacy_label.grid(row=1, column=0, sticky="w", pady=(3, 0))
+        self.privacy_label.grid(row=1, column=0, sticky="ew", pady=(3, 0))
+
+        body = SplitPane(self, orient=tk.VERTICAL, fraction=0.35, minimum=(110, 340))
+        body.grid(row=2, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        settings = ScrollableFrame(body, width=700, height=230)
+        settings.content.columnconfigure(0, weight=1)
+        body.add(settings, weight=1)
 
         controls = ttk.LabelFrame(
-            self,
+            settings.content,
             text=self._tr("測試設定", "Benchmark settings"),
             padding=12,
         )
-        controls.grid(row=1, column=0, sticky="ew", padx=8)
-        for column in range(8):
-            controls.columnconfigure(column, weight=1 if column in {1, 3, 5} else 0)
+        controls.grid(row=0, column=0, sticky="ew")
+        controls.columnconfigure(1, weight=1)
+        controls.columnconfigure(3, weight=1)
 
         ttk.Label(controls, text=self._tr("點雲模型", "Point-cloud model")).grid(
             row=0, column=0, sticky="w"
@@ -226,17 +236,17 @@ class PerformanceBenchmarkPage(ttk.Frame):
             variable=self.posture_var,
             value="walking",
         )
-        self.walking_radio.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        self.walking_radio.grid(row=1, column=0, sticky="w", pady=(3, 0))
         ttk.Label(controls, text=self._tr("預期 Person ID（選填）", "Expected Person ID (optional)")).grid(
             row=2, column=4, sticky="w", pady=(10, 0)
         )
         self.expected_entry = ttk.Entry(controls, textvariable=self.expected_person_var)
         self.expected_entry.grid(row=2, column=5, sticky="ew", padx=(6, 14), pady=(10, 0))
-        self.gallery_label = ttk.Label(controls, textvariable=self.gallery_var)
+        self.gallery_label = WrappedLabel(controls, textvariable=self.gallery_var)
         self.gallery_label.grid(row=2, column=6, columnspan=2, sticky="e", pady=(10, 0))
 
-        actions = ttk.Frame(controls)
-        actions.grid(row=3, column=0, columnspan=8, sticky="ew", pady=(12, 0))
+        actions = ttk.Frame(self)
+        actions.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
         actions.columnconfigure(3, weight=1)
         self.start_button = ttk.Button(
             actions,
@@ -259,10 +269,24 @@ class PerformanceBenchmarkPage(ttk.Frame):
             state="disabled",
         )
         self.export_button.grid(row=0, column=2, sticky="w", padx=(8, 0))
-        ttk.Label(actions, textvariable=self.status_var).grid(row=0, column=3, sticky="e")
+        WrappedLabel(actions, textvariable=self.status_var).grid(row=1, column=0, columnspan=4, sticky="ew", pady=(4, 0))
 
-        content = ttk.Panedwindow(self, orient=tk.VERTICAL)
-        content.grid(row=2, column=0, sticky="nsew", padx=8, pady=(8, 8))
+        # Keep at most two setting pairs per row; scrolling handles small/DPI-scaled windows.
+        for widget in controls.grid_slaves():
+            info = widget.grid_info()
+            row, col = int(info["row"]), int(info["column"])
+            if row == 0:
+                widget.grid_configure(row=0 if col < 4 else 1, column=col if col < 4 else col - 4)
+            elif row == 1:
+                widget.grid_configure(row=2 + col // 4, column=col % 4)
+            elif row == 2:
+                if col < 4:
+                    widget.grid_configure(row=4)
+                else:
+                    widget.grid_configure(row=5, column=col - 4, sticky="ew")
+
+        content = SplitPane(body, orient=tk.VERTICAL, fraction=0.42, minimum=(150, 180))
+        body.add(content, weight=2)
         live = ttk.LabelFrame(
             content,
             text=self._tr("即時監看（不顯示影像）", "Live telemetry (no images)"),
@@ -296,9 +320,9 @@ class PerformanceBenchmarkPage(ttk.Frame):
         metrics = ttk.Frame(live)
         metrics.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         for index, (title, key) in enumerate(items):
-            metrics.columnconfigure(index, weight=1)
+            metrics.columnconfigure(index % 4, weight=1, uniform="metric")
             cell = ttk.Frame(metrics, padding=(6, 2))
-            cell.grid(row=0, column=index, sticky="ew")
+            cell.grid(row=index // 4, column=index % 4, sticky="ew")
             ttk.Label(cell, text=title).grid(row=0, column=0)
             ttk.Label(cell, textvariable=self.current_values[key], style="Info.TLabel").grid(
                 row=1, column=0, pady=(3, 0)
@@ -342,14 +366,18 @@ class PerformanceBenchmarkPage(ttk.Frame):
         scroll = ttk.Scrollbar(history, orient="vertical", command=self.tree.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=scroll.set)
+        horizontal = ttk.Scrollbar(history, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(xscrollcommand=horizontal.set)
+        horizontal.grid(row=1, column=0, sticky="ew")
         self.detail_var = tk.StringVar(
             value=self._tr(
                 "完成測試後，這裡會顯示報告摘要與自動保存位置。",
                 "A report summary and automatic save path appear here after completion.",
             )
         )
-        ttk.Label(history, textvariable=self.detail_var).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        self.i18n.register_ui_variables(self.detail_var)
+        WrappedLabel(history, textvariable=self.detail_var).grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0)
         )
         self.tree.bind("<<TreeviewSelect>>", lambda _event: self._show_selected())
 
@@ -360,6 +388,11 @@ class PerformanceBenchmarkPage(ttk.Frame):
     def refresh_bundles(self) -> None:
         current = self.bundle_labels.get(self.bundle_var.get())
         bundles = self.controller.available_bundles(refresh=True)
+        old_revision = getattr(self, "_bundle_revisions", {}).get(current)
+        self._bundle_revisions = {
+            key: (bundle.checkpoint_sha256, deepcopy(bundle.data), deepcopy(bundle.model))
+            for key, bundle in bundles.items()
+        }
         self.bundle_labels = {
             f"{bundle.display_name} | {bundle.checkpoint_sha256[:8]}": bundle_id
             for bundle_id, bundle in bundles.items()
@@ -386,7 +419,12 @@ class PerformanceBenchmarkPage(ttk.Frame):
             )
         if selected:
             self.bundle_var.set(selected)
-            self._bundle_changed()
+            selected_id = self.bundle_labels[selected]
+            changed = old_revision is not None and old_revision != self._bundle_revisions[selected_id]
+            if selected_id != current or changed:
+                self._bundle_changed()
+            else:
+                self._refresh_gallery_summary()
 
     def _bundle_id(self) -> str:
         bundle_id = self.bundle_labels.get(self.bundle_var.get())
@@ -402,6 +440,11 @@ class PerformanceBenchmarkPage(ttk.Frame):
         bundle = self.controller.model_store.get(bundle_id)
         clip_len = int(bundle.data.get("clip_len") or 15)
         self.clip_len_var.set(clip_len)
+        self._refresh_gallery_summary()
+
+    def _refresh_gallery_summary(self) -> None:
+        bundle_id = self._bundle_id()
+        clip_len = int(self.clip_len_var.get())
         summary = self.controller.database_summary(bundle_id, clip_len=clip_len)
         self.gallery_var.set(
             f"Gallery: {summary.get('persons', 0)} people / "

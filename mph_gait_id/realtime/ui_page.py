@@ -1,4 +1,5 @@
 from __future__ import annotations
+from copy import deepcopy
 
 from pathlib import Path
 from typing import Any, Callable
@@ -15,6 +16,7 @@ from ..identity import suggest_registration_identity
 from ..i18n import I18n
 from ..ui.preview import render_image
 from ..ui.scrollable import ScrollableFrame
+from ..ui.layout import WrappedLabel
 from ..ui.workers import BackgroundWorker
 from .detection import (
     DEFAULT_SAM_CHECKPOINT,
@@ -191,8 +193,8 @@ class RealtimePage(ttk.Frame):
         )
         self.status_var = tk.StringVar(value="Ready")
         self.device_var_text = tk.StringVar(value="Device has not been checked")
-        self.result_var = tk.StringVar(value="No realtime result")
-        self.result_detail_var = tk.StringVar(value="Select a source and start the pipeline")
+        self.result_var = tk.StringVar(value=self.i18n.tr("No realtime result"))
+        self.result_detail_var = tk.StringVar(value=self.i18n.tr("Select a source and start the pipeline"))
         self.fps_var = tk.StringVar(value="0.0")
         self.capture_fps_var = tk.StringVar(value="0.0")
         self.sampling_fps_var = tk.StringVar(value="0.0")
@@ -204,6 +206,7 @@ class RealtimePage(ttk.Frame):
         self.latency_var = tk.StringVar(value="0.0 ms")
         self.enrollment_progress_var = tk.StringVar(value="-")
         self.gallery_var = tk.StringVar(value="Gallery: 0 identities")
+        self.i18n.register_ui_variables(self.status_var, self.device_var_text, self.pass_status_var)
         self.bundle_labels: dict[str, str] = {}
         self._update_cloud_zoom_text()
 
@@ -263,7 +266,7 @@ class RealtimePage(ttk.Frame):
             self._option_label(self.pass_direction_labels, direction)
         )
         self.source_combo.configure(values=list(self.source_labels))
-        self.detector_combo.configure(values=list(self.detector_labels))
+        self.detector_combo.configure(values=self._detector_values_for_source(source))
         self.pass_direction_combo.configure(values=list(self.pass_direction_labels))
         self.recognize_radio.configure(
             text=self.i18n.tr("recognition"),
@@ -280,21 +283,28 @@ class RealtimePage(ttk.Frame):
         self.rgb_pointcloud_check.configure(
             text=self.i18n.tr("realtime.rgb_pointcloud")
         )
-        self._source_changed()
-        self._operation_changed(reset_result=False)
+        self.start_button.configure(text=self.i18n.tr(
+            "Start guided enrollment session" if operation == "enroll" else "Start realtime recognition"))
+        if getattr(self, "_last_snapshot", None) is None:
+            for name in ("result_var", "result_detail_var"):
+                variable = getattr(self, name, None)
+                if variable is not None:
+                    variable.set(self.i18n.tr(variable.get()))
 
     def _build(self) -> None:
-        self.columnconfigure(1, weight=1)
+        self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
+        panes = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
+        panes.grid(row=0, column=0, sticky="nsew")
         sidebar = ScrollableFrame(
-            self,
+            panes,
             width=390,
             canvas_background="#ffffff",
             frame_style="Panel.TFrame",
         )
-        sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        content = ttk.Frame(self, style="Panel.TFrame", padding=12)
-        content.grid(row=0, column=1, sticky="nsew")
+        content = ttk.Frame(panes, style="Panel.TFrame", padding=12)
+        panes.add(sidebar, weight=0)
+        panes.add(content, weight=1)
         self._build_sidebar(sidebar.content)
         self._build_content(content)
 
@@ -807,11 +817,11 @@ class RealtimePage(ttk.Frame):
         result = ttk.Frame(parent, style="Panel.TFrame")
         result.grid(row=0, column=0, sticky="ew")
         result.columnconfigure(0, weight=1)
-        ttk.Label(result, textvariable=self.result_var, style="Result.TLabel").grid(
-            row=0, column=0, sticky="w"
+        WrappedLabel(result, textvariable=self.result_var, style="Result.TLabel").grid(
+            row=0, column=0, sticky="ew"
         )
-        ttk.Label(result, textvariable=self.result_detail_var, style="Muted.Panel.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(3, 0)
+        WrappedLabel(result, textvariable=self.result_detail_var, style="Muted.Panel.TLabel").grid(
+            row=1, column=0, sticky="ew", pady=(3, 0)
         )
 
         telemetry = ttk.Frame(parent, style="Panel.TFrame")
@@ -833,7 +843,7 @@ class RealtimePage(ttk.Frame):
         ):
             row = index // 5
             column = index % 5
-            telemetry.columnconfigure(column, weight=1)
+            telemetry.columnconfigure(column, weight=1, uniform="metric")
             item = ttk.Frame(telemetry, style="Panel.TFrame", padding=(8, 5))
             item.grid(
                 row=row,
@@ -842,11 +852,12 @@ class RealtimePage(ttk.Frame):
                 padx=(0 if column == 0 else 5, 0),
                 pady=(0 if row == 0 else 5, 0),
             )
-            ttk.Label(item, text=title, style="Muted.Panel.TLabel").grid(
-                row=0, column=0, sticky="w"
+            item.columnconfigure(0, weight=1)
+            WrappedLabel(item, text=title, style="Muted.Panel.TLabel").grid(
+                row=0, column=0, sticky="ew"
             )
-            ttk.Label(item, textvariable=variable, style="Panel.TLabel").grid(
-                row=1, column=0, sticky="w"
+            WrappedLabel(item, textvariable=variable, style="Panel.TLabel").grid(
+                row=1, column=0, sticky="ew"
             )
 
         paned = ttk.Panedwindow(parent, orient=tk.VERTICAL)
@@ -947,13 +958,16 @@ class RealtimePage(ttk.Frame):
             self.candidates.heading(column, text=heading)
             self.candidates.column(column, width=width, anchor="w")
         scroll = ttk.Scrollbar(details, command=self.candidates.yview)
-        self.candidates.configure(yscrollcommand=scroll.set)
+        horizontal = ttk.Scrollbar(details, orient="horizontal", command=self.candidates.xview)
+        self.candidates.configure(yscrollcommand=scroll.set, xscrollcommand=horizontal.set)
         self.candidates.grid(row=0, column=0, sticky="nsew")
         scroll.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
 
     def _update_preview_layout(self, event: tk.Event) -> None:
         width = max(1, int(getattr(event, "width", 1)))
-        mode = "wide" if width >= 720 else "stacked"
+        threshold = 700 if self._preview_layout_mode == "wide" else 740
+        mode = "wide" if width >= threshold else "stacked"
         if mode == self._preview_layout_mode:
             return
         self._preview_layout_mode = mode
@@ -961,23 +975,28 @@ class RealtimePage(ttk.Frame):
             group.grid_forget()
         previews = self.preview_container
         if mode == "wide":
-            previews.columnconfigure(0, weight=1, minsize=320)
-            previews.columnconfigure(1, weight=1, minsize=320)
-            previews.rowconfigure(0, weight=1, minsize=280)
+            previews.columnconfigure(0, weight=1, minsize=0, uniform="preview")
+            previews.columnconfigure(1, weight=1, minsize=0, uniform="preview")
+            previews.rowconfigure(0, weight=1, minsize=100)
             previews.rowconfigure(1, weight=0, minsize=0)
             self.rgb_group.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
             self.cloud_group.grid(row=0, column=1, sticky="nsew", padx=(3, 0))
         else:
-            previews.columnconfigure(0, weight=1, minsize=280)
-            previews.columnconfigure(1, weight=0, minsize=0)
-            previews.rowconfigure(0, weight=1, minsize=240)
-            previews.rowconfigure(1, weight=1, minsize=240)
+            previews.columnconfigure(0, weight=1, minsize=0, uniform="")
+            previews.columnconfigure(1, weight=0, minsize=0, uniform="")
+            previews.rowconfigure(0, weight=1, minsize=100)
+            previews.rowconfigure(1, weight=1, minsize=100)
             self.rgb_group.grid(row=0, column=0, sticky="nsew", pady=(0, 4))
             self.cloud_group.grid(row=1, column=0, sticky="nsew", pady=(4, 0))
 
     def refresh_bundles(self) -> None:
         bundles = self.controller.available_bundles(refresh=True)
         current_id = self._bundle_id(required=False)
+        old_revision = getattr(self, "_bundle_revisions", {}).get(current_id)
+        self._bundle_revisions = {
+            key: (item.checkpoint_sha256, deepcopy(item.data), deepcopy(item.model))
+            for key, item in bundles.items()
+        }
         self.bundle_labels = {
             f"{item.display_name} | {item.checkpoint_sha256[:8]}": bundle_id
             for bundle_id, item in bundles.items()
@@ -1011,7 +1030,12 @@ class RealtimePage(ttk.Frame):
             )
         if selected:
             self.bundle_var.set(selected)
-            self._bundle_changed()
+            selected_id = self.bundle_labels[selected]
+            changed = old_revision is not None and old_revision != self._bundle_revisions[selected_id]
+            if selected_id != current_id or changed:
+                self._bundle_changed()
+            else:
+                self._refresh_gallery_summary()
 
     def _bundle_id(self, required: bool = True) -> str | None:
         value = self.bundle_labels.get(self.bundle_var.get())
@@ -1039,15 +1063,15 @@ class RealtimePage(ttk.Frame):
             self.start_button.configure(text="Start guided enrollment session")
             self.loop_var.set(False)
             if reset_result:
-                self.result_var.set("Realtime enrollment ready")
-                self.result_detail_var.set("Enter an identity and begin walking")
+                self.result_var.set(self.i18n.tr("Realtime enrollment ready"))
+                self.result_detail_var.set(self.i18n.tr("Enter an identity and begin walking"))
             self._autofill_replay_identity(silent=True)
         else:
             self.enrollment_frame.grid_remove()
             self.start_button.configure(text="Start realtime recognition")
             if reset_result:
-                self.result_var.set("No realtime result")
-                self.result_detail_var.set("Select a source and start the pipeline")
+                self.result_var.set(self.i18n.tr("No realtime result"))
+                self.result_detail_var.set(self.i18n.tr("Select a source and start the pipeline"))
         recognition_state = "disabled" if enrolling else "normal"
         self.threshold_spin.configure(state=recognition_state)
         self.margin_spin.configure(state=recognition_state)

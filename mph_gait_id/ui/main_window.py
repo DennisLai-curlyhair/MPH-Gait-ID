@@ -17,6 +17,7 @@ from .gallery_manager import GalleryManagerPage
 from .enrollment_sources import EnrollmentSourcesPage
 from .performance_benchmark import PerformanceBenchmarkPage
 from .scrollable import ScrollableFrame
+from .layout import ScrollPosition, SplitPane, WrappedLabel, preserve_layout
 from .workers import BackgroundWorker, WorkerMessage
 
 
@@ -100,9 +101,11 @@ class GaitIdentityWindow:
         self.person_name_var = tk.StringVar()
         self.status_var = tk.StringVar(value="系統就緒")
         self.database_var = tk.StringVar(value="Gallery 尚未載入")
-        self.result_identity_var = tk.StringVar(value="尚無辨識結果")
+        self.result_identity_var = tk.StringVar(value=self.i18n.tr("尚無辨識結果"))
         self.result_detail_var = tk.StringVar(value="-")
         self.result_state_var = tk.StringVar(value="IDLE")
+        self.i18n.register_ui_variables(self.status_var, self.database_var,
+                                       self.source_kind_var, self.identity_suggestion_var)
 
         self._configure_window()
         self._configure_styles()
@@ -225,10 +228,10 @@ class GaitIdentityWindow:
         self.realtime_page_host = ttk.Frame(self.mode_notebook, padding=10)
         self.gallery_page_host = ttk.Frame(self.mode_notebook, padding=10)
         self.performance_page_host = ttk.Frame(self.mode_notebook, padding=10)
-        self.mode_notebook.add(self.offline_page, text="Offline registration / recognition")
-        self.mode_notebook.add(self.realtime_page_host, text="Real-time Azure Kinect")
-        self.mode_notebook.add(self.gallery_page_host, text="Gallery Manager")
-        self.mode_notebook.add(self.performance_page_host, text="Live Performance Benchmark")
+        self.mode_notebook.add(self.offline_page, text="nav.offline")
+        self.mode_notebook.add(self.realtime_page_host, text="nav.realtime")
+        self.mode_notebook.add(self.gallery_page_host, text="nav.gallery")
+        self.mode_notebook.add(self.performance_page_host, text="nav.benchmark")
         self._build_offline_layout(self.offline_page)
 
         from mph_gait_id.realtime.ui_page import RealtimePage
@@ -275,6 +278,7 @@ class GaitIdentityWindow:
         locale_name = LANGUAGE_CHOICES.get(self.language_var.get())
         if locale_name is None:
             return
+        restore_layout = preserve_layout(self.root)
         self.i18n.set_locale(locale_name)
         self.root.title(self.i18n.tr("app.title"))
         if hasattr(self, "realtime_page"):
@@ -286,6 +290,13 @@ class GaitIdentityWindow:
         if hasattr(self, "sources_page"):
             self.sources_page.set_locale(locale_name)
         self.i18n.apply(self.root)
+        self.root.after_idle(restore_layout)
+        if hasattr(self, "bundles"):
+            self._update_model_description()
+            self._update_source_summary()
+            self._update_database_description()
+            if self.current_outcome is None:
+                self.result_identity_var.set(self.i18n.tr("尚無辨識結果"))
 
     def _on_mode_changed(self) -> None:
         if not hasattr(self, "realtime_page"):
@@ -687,16 +698,16 @@ class GaitIdentityWindow:
         result_bar = ttk.Frame(parent, style="Panel.TFrame", padding=(4, 0, 4, 10))
         result_bar.grid(row=0, column=0, sticky="ew")
         result_bar.columnconfigure(0, weight=1)
-        ttk.Label(result_bar, textvariable=self.result_identity_var, style="Result.TLabel").grid(
-            row=0, column=0, sticky="w"
+        WrappedLabel(result_bar, textvariable=self.result_identity_var, style="Result.TLabel").grid(
+            row=0, column=0, sticky="ew"
         )
         self.state_label = ttk.Label(result_bar, textvariable=self.result_state_var, style="Info.TLabel")
         self.state_label.grid(row=0, column=1, sticky="e")
-        ttk.Label(result_bar, textvariable=self.result_detail_var, style="Muted.Panel.TLabel").grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(3, 0)
+        WrappedLabel(result_bar, textvariable=self.result_detail_var, style="Muted.Panel.TLabel").grid(
+            row=1, column=0, columnspan=2, sticky="ew", pady=(3, 0)
         )
 
-        self.content_paned = ttk.Panedwindow(parent, orient=tk.VERTICAL)
+        self.content_paned = SplitPane(parent, orient=tk.VERTICAL, fraction=0.65, minimum=(200, 120))
         self.content_paned.grid(row=1, column=0, sticky="nsew")
         preview_host = ttk.Frame(self.content_paned, style="Panel.TFrame")
         details_host = ttk.Frame(self.content_paned, style="Panel.TFrame")
@@ -779,9 +790,11 @@ class GaitIdentityWindow:
             tree.heading(column, text=heading)
             tree.column(column, width=width, anchor="w")
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
+        horizontal = ttk.Scrollbar(parent, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=scrollbar.set, xscrollcommand=horizontal.set)
         tree.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=2, column=0, sticky="ew")
         return tree
 
     def _rebuild_bundle_labels(self) -> None:
@@ -1058,6 +1071,12 @@ class GaitIdentityWindow:
             self._append_log(message)
         self._active_source_signature = signature
         self.threshold_var.set(self.controller.provisional_threshold(bundle.bundle_id))
+        self._update_model_description()
+        self._update_source_summary()
+        self._refresh_database()
+
+    def _update_model_description(self) -> None:
+        bundle = self.bundles[self._bundle_id()]
         clip_len = int(bundle.data.get("clip_len", 15))
         drop_first = int(bundle.data.get("drop_first_frames", 0))
         representation_detail = (
@@ -1071,22 +1090,20 @@ class GaitIdentityWindow:
             f"{bundle.architecture}\n"
             f"{representation_detail}\n"
             f"clip {clip_len} | drop first {drop_first} | fold {bundle.fold}\n"
-            f"參數來源 {configuration_source} | SHA {bundle.checkpoint_sha256[:12]}"
+            f"{self.i18n.tr('model.configuration_source')} {configuration_source} | SHA {bundle.checkpoint_sha256[:12]}"
         )
-        self.model_path_var.set(f"權重：{bundle.checkpoint}")
-        self._update_source_summary()
-        self._refresh_database()
+        self.model_path_var.set(f"{self.i18n.tr('model.checkpoint_path')}: {bundle.checkpoint}")
 
     def _update_source_summary(self) -> None:
-        requirement = "點雲：可選 sequence 或人物資料夾（自動尋找 clear_data_*.npy）"
+        requirement = self.i18n.tr("source.folder_requirement")
         count = len(self.source_paths)
         selection = len(self.source_list.curselection()) if hasattr(self, "source_list") else 0
         if count:
             self.source_kind_var.set(
-                f"已加入 {count} 個來源，選取 {selection} 個。{requirement}"
+                self.i18n.tr("source.folder_count", count=count, selected=selection) + " " + requirement
             )
         else:
-            self.source_kind_var.set(f"尚未加入來源。{requirement}")
+            self.source_kind_var.set(self.i18n.tr("source.folder_empty") + " " + requirement)
 
     def _start_enroll(self) -> None:
         sources = self._validated_sources()
@@ -1359,22 +1376,31 @@ class GaitIdentityWindow:
             self.progress.stop()
 
     def _refresh_database(self) -> None:
+        position = ScrollPosition.capture(self.person_tree)
+        selected = {self.person_tree.item(iid, "values")[0] for iid in self.person_tree.selection()}
         bundle_id = self._bundle_id()
         summary = self.controller.database_summary(bundle_id=bundle_id)
         overall = self.controller.database_summary()
-        self.database_var.set(
-            f"目前模型 Gallery: {summary['persons']} 人 / "
-            f"{summary['active_embeddings']} 個 clip 特徵 | "
-            f"全部模型: {overall['persons']} 人 / "
-            f"{overall['active_embeddings']} 個 clip 特徵"
-        )
+        self._database_counts = (summary, overall)
+        self._update_database_description()
         self._clear_tree(self.person_tree)
         for item in self.controller.list_persons(bundle_id=bundle_id):
-            self.person_tree.insert(
+            iid = self.person_tree.insert(
                 "",
                 "end",
                 values=(item["person_id"], item["display_name"], item["embedding_count"]),
             )
+            if item["person_id"] in selected:
+                self.person_tree.selection_add(iid)
+        position.restore(self.person_tree)
+
+    def _update_database_description(self) -> None:
+        if not hasattr(self, "_database_counts"):
+            return
+        summary, overall = self._database_counts
+        self.database_var.set(self.i18n.tr(
+            "gallery.offline_summary", persons=summary['persons'], embeddings=summary['active_embeddings'],
+            all_persons=overall['persons'], all_embeddings=overall['active_embeddings']))
 
     def _manage_selected_gallery(self) -> None:
         allowed, reason = self._gallery_transfer_available()

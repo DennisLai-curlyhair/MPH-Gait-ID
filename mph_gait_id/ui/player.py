@@ -11,6 +11,7 @@ from tkinter import ttk
 from PIL import ImageTk
 
 from mph_gait_id.controller import OperationOutcome
+from .scrollable import ScrollableFrame
 
 from .preview import (
     PreviewViewOptions,
@@ -68,8 +69,10 @@ class PreviewPlayer(ttk.Frame):
         self.frame_label = ttk.Label(self, text="0 / 0", width=14, anchor="e")
         self.frame_label.grid(row=1, column=4, padx=(10, 0), pady=(10, 0))
 
-        self.view_controls = ttk.Frame(self, style="Preview.TFrame")
-        self.view_controls.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(8, 0))
+        self.view_scroll = ScrollableFrame(self, width=320, height=125, frame_style="Preview.TFrame")
+        self.view_scroll.content.configure(padding=2)
+        self.view_scroll.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(8, 0))
+        self.view_controls = self.view_scroll.content
         self.view_controls.columnconfigure(6, weight=1)
         self.view_title_label = ttk.Label(
             self.view_controls,
@@ -157,7 +160,7 @@ class PreviewPlayer(ttk.Frame):
             "<<ComboboxSelected>>",
             lambda _event: self._overlay_changed(),
         )
-        self.view_controls.grid_remove()
+        self.view_scroll.grid_remove()
         self._update_view_state_label()
 
         self.columnconfigure(3, weight=1)
@@ -179,7 +182,7 @@ class PreviewPlayer(ttk.Frame):
         self.slider.configure(to=maximum)
         self.position.set(0)
         self.view_title_label.configure(text="點雲視角")
-        self.view_controls.grid()
+        self.view_scroll.grid()
         self.show_index(0)
 
     def clear(self) -> None:
@@ -189,7 +192,7 @@ class PreviewPlayer(ttk.Frame):
         self._cache.clear()
         self.image_label.configure(image="", text="尚無可視化結果")
         self.frame_label.configure(text="0 / 0")
-        self.view_controls.grid_remove()
+        self.view_scroll.grid_remove()
 
     def toggle_play(self) -> None:
         if not self.frames:
@@ -378,5 +381,4 @@ class PreviewPlayer(ttk.Frame):
                 f"V {vertical} | {self.view_options.zoom:.2f}x"
             )
         )
-
 

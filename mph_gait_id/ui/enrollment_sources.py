@@ -10,6 +10,7 @@ from PIL import ImageTk
 from ..enrollment_sources import EnrollmentSourceLibrary
 from ..i18n import I18n
 from .workers import BackgroundWorker
+from .layout import ScrollPosition, WrappedLabel, reserve_text_width
 
 
 class EnrollmentSourcesPage(ttk.Frame):
@@ -32,6 +33,7 @@ class EnrollmentSourcesPage(ttk.Frame):
         self.index = 0
         self.timer = None
         self.photo = None
+        self._usage = None
         self._labels = []
         self.summary = tk.StringVar()
         self.detail = tk.StringVar()
@@ -57,7 +59,7 @@ class EnrollmentSourcesPage(ttk.Frame):
             button = ttk.Button(toolbar, command=lambda op=operation: self._open_transfer(op))
             button.grid(row=1, column=col * 2, columnspan=2, sticky="ew", padx=4, pady=(6, 0))
             self._labels.append((button, zh, en))
-        ttk.Label(self, textvariable=self.summary).grid(row=2, column=0, sticky="w", pady=6)
+        WrappedLabel(self, textvariable=self.summary).grid(row=2, column=0, sticky="ew", pady=6)
         panes = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
         panes.grid(row=1, column=0, sticky="nsew")
         listing, preview = ttk.Frame(panes), ttk.Frame(panes)
@@ -81,25 +83,27 @@ class EnrollmentSourcesPage(ttk.Frame):
         preview.rowconfigure(1, weight=1)
         controls = ttk.Frame(preview)
         controls.grid(row=0, column=0, sticky="ew", padx=8)
+        for column in range(4):
+            controls.columnconfigure(column, weight=1)
         self.pass_combo = ttk.Combobox(controls, textvariable=self.pass_var, state="readonly", width=12)
-        self.pass_combo.grid(row=0, column=0, padx=4)
+        self.pass_combo.grid(row=0, column=0, columnspan=4, sticky="ew", padx=4)
         self.pass_combo.bind("<<ComboboxSelected>>", lambda _e: self._select_pass())
         for col, (zh, en, command) in enumerate([
             ("播放", "Play", self._play), ("暫停", "Pause", self.pause),
             ("上一幀", "Previous", lambda: self._step(-1)),
             ("下一幀", "Next", lambda: self._step(1)),
-        ], start=1):
+        ]):
             button = ttk.Button(controls, command=command, width=9)
-            button.grid(row=0, column=col, padx=2)
+            button.grid(row=1, column=col, sticky="ew", padx=2, pady=(4, 0))
             self._labels.append((button, zh, en))
         ttk.Scale(controls, from_=0.25, to=3.0, variable=self.zoom,
-                  command=lambda _v: self._show()).grid(row=1, column=0, columnspan=5, sticky="ew")
-        self.canvas = tk.Canvas(preview, background="#181b1f", highlightthickness=0, width=500, height=420)
+                  command=lambda _v: self._show()).grid(row=2, column=0, columnspan=4, sticky="ew")
+        self.canvas = tk.Canvas(preview, background="#181b1f", highlightthickness=0, width=320, height=250)
         self.canvas.grid(row=1, column=0, sticky="nsew", padx=8, pady=6)
         self.canvas.bind("<Configure>", lambda _e: self._show())
         self.seek = ttk.Scale(preview, from_=0, to=0, command=self._seek)
         self.seek.grid(row=2, column=0, sticky="ew", padx=8)
-        ttk.Label(preview, textvariable=self.detail, wraplength=550).grid(row=3, column=0, sticky="w", padx=8)
+        WrappedLabel(preview, textvariable=self.detail).grid(row=3, column=0, sticky="ew", padx=8)
         self.set_locale(self.i18n.locale)
         self.refresh()
 
@@ -108,31 +112,57 @@ class EnrollmentSourcesPage(ttk.Frame):
 
     def set_locale(self, _locale):
         for widget, zh, en in self._labels:
+            reserve_text_width(widget, (zh, en))
             widget.configure(text=self._t(zh, en))
         for key, zh, en in [("person", "人物 ID", "Person ID"), ("name", "姓名", "Name"),
                             ("passes", "片段", "Passes"), ("frames", "幀數", "Frames"),
                             ("size", "大小 MiB", "Size MiB"), ("date", "建立 UTC", "Created UTC")]:
             self.tree.heading(key, text=self._t(zh, en))
+        self._show_usage()
+
+    def _show_usage(self):
+        if self._usage is not None:
+            usage = self._usage
+            self.summary.set(self._t("來源 / 已提交 / 磁碟總量", "Sources / committed / disk total") +
+                             f': {usage["source_count"]} / {usage["committed_bytes"] / 2**20:.1f} MiB / '
+                             f'{usage["disk_bytes"] / 2**20:.1f} MiB')
+
+    def _clear_preview(self):
+        self.source_id, self.manifest, self.frames = None, None, []
+        self.index = 0
+        self.pass_combo.configure(values=[])
+        self.pass_var.set("")
+        self.seek.configure(to=0)
+        self.seek.set(0)
+        self.photo = None
+        self.canvas.delete("all")
+        self.detail.set("")
 
     def refresh(self):
         self.pause()
-        self.source_id, self.manifest, self.frames = None, None, []
-        self.pass_combo.configure(values=[])
-        self.pass_var.set("")
-        self.canvas.delete("all")
-        self.detail.set("")
-        self.tree.delete(*self.tree.get_children())
+        selected = self.tree.selection()
+        focused = self.tree.focus()
+        position = ScrollPosition.capture(self.tree)
         try:
-            for row in self.library.list_sources():
+            rows = self.library.list_sources()
+            usage = self.library.usage()
+            self.tree.delete(*self.tree.get_children())
+            for row in rows:
                 linked = row["current_person_id"] is not None
                 self.tree.insert("", "end", iid=row["source_id"], values=(
                     row["current_person_id"] if linked else row["captured_person_id"] + " *",
                     row["current_name"] if linked else row["captured_name"],
                     row["pass_count"], row["frame_count"], f'{row["size_bytes"] / 2**20:.1f}', row["created_at"]))
-            usage = self.library.usage()
-            self.summary.set(self._t("來源 / 已提交 / 磁碟總量", "Sources / committed / disk total") +
-                             f': {usage["source_count"]} / {usage["committed_bytes"] / 2**20:.1f} MiB / '
-                             f'{usage["disk_bytes"] / 2**20:.1f} MiB')
+            remaining = [item for item in selected if self.tree.exists(item)]
+            self.tree.selection_set(remaining)
+            if focused and self.tree.exists(focused):
+                self.tree.focus(focused)
+            if self.source_id not in remaining:
+                self._clear_preview()
+            self._select()
+            position.restore(self.tree)
+            self._usage = usage
+            self._show_usage()
         except Exception as exc:
             self.summary.set(str(exc))
 
@@ -140,6 +170,9 @@ class EnrollmentSourcesPage(ttk.Frame):
         self.pause()
         selection = self.tree.selection()
         if not selection:
+            self._clear_preview()
+            return
+        if self.source_id in selection and self.manifest is not None:
             return
         try:
             self.source_id = selection[0]
@@ -149,8 +182,7 @@ class EnrollmentSourcesPage(ttk.Frame):
             self.pass_var.set(passes[0])
             self._select_pass()
         except Exception as exc:
-            self.frames = []
-            self.canvas.delete("all")
+            self._clear_preview()
             self.detail.set(str(exc))
 
     def _select_pass(self):
