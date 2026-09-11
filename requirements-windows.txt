@@ -1,5 +1,5 @@
 # Windows/Python 3.10-3.12 Azure Kinect dependencies.
-# Install Sensor SDK 1.4.1 separately. Install a matched torch/torchvision
-# pair from https://pytorch.org/get-started/locally/ for the local GPU first.
+# Install Sensor SDK 1.4.1 and a compatible NVIDIA driver separately.
 # Do not reuse the retired PyTorch 2.0/CUDA 11.7 environment.
+-r requirements-cuda.txt
 -r requirements-realtime.txt

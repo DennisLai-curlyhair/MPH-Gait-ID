@@ -195,9 +195,31 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\mph_gait_id\scripts\run_ui_windows.ps1
 ```
 
-The Windows preset is stored in `requirements-windows.txt`. Install a matched
-PyTorch/torchvision pair for your GPU from the official PyTorch wheel index.
+The Windows preset includes `requirements-cuda.txt`, which pins CUDA 12.6
+builds of PyTorch 2.10.0 and torchvision 0.25.0. Both bootstrap profiles
+install these GPU builds; unavailable wheels cause an installation error
+rather than a CPU fallback. The version pair follows the
+[official PyTorch installation matrix](https://pytorch.org/get-started/previous-versions/).
+A compatible NVIDIA GPU and driver are still required for CUDA execution.
 The old PyTorch 2.0/CUDA 11.7 environment is no longer supported.
+
+Alternatively, in Anaconda Prompt from the repository root:
+
+```bat
+conda create -n mph-gait-id-gpu python=3.11 pip -y
+conda activate mph-gait-id-gpu
+python -m pip install --upgrade pip
+python -m pip install -r requirements-windows.txt
+python -m pip install --no-deps -e .
+python -m pip check
+python -c "import torch; print(torch.__version__, torch.version.cuda); assert torch.cuda.is_available(), 'CUDA unavailable: check the NVIDIA driver and active environment'; x=torch.randn(256,256,device='cuda'); y=x@x; torch.cuda.synchronize(); print('GPU computation OK:', torch.cuda.get_device_name(0))"
+python -m mph_gait_id.ui_app
+```
+
+Expect `2.10.0+cu126` and `12.6`. Generic `requirements.txt` and
+`requirements-realtime.txt` remain platform-neutral; use the Windows preset
+above to guarantee GPU wheels, or combine `-r requirements-cuda.txt` with
+the generic requirements in the same pip command on Linux.
 
 ## Upgrading to the Inference-Hardening Branch
 
