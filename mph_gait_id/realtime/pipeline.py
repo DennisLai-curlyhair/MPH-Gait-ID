@@ -1341,6 +1341,13 @@ class RealtimePipeline:
             and stable_count >= required
             and str(result.get("person_id")) == stable_identity
         )
+        output["window_accepted"] = bool(result.get("accepted"))
+        output["accepted"] = output["stable"]
+        if not output["accepted"]:
+            output["candidate_person_id"] = result.get("candidate_person_id") or result.get("person_id")
+            output["candidate_display_name"] = result.get("candidate_display_name") or result.get("display_name")
+            output["person_id"] = None
+            output["display_name"] = "Unknown"
         if result.get("accepted") and stable_count < required:
             output["state"] = "accumulating"
         elif output["stable"]:

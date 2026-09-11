@@ -44,7 +44,7 @@ class EnrollmentSourcesPage(ttk.Frame):
             ("重新整理", "Refresh", self.refresh),
             ("刪除選取來源", "Delete source", self._delete),
             ("清理未提交暫存", "Clean uncommitted files", self._cleanup),
-            ("多模型特徵註冊", "Register to models", self._register),
+            ("多模型特徵註冊", "Register to models", self._open_model_registration),
         ]):
             button = ttk.Button(toolbar, command=command)
             button.grid(row=0, column=i, padx=4)
@@ -217,7 +217,7 @@ class EnrollmentSourcesPage(ttk.Frame):
         return self.worker.busy or bool(
             self.registration_dialog is not None and self.registration_dialog.running)
 
-    def _register(self):
+    def _open_model_registration(self):
         if self.registration_dialog is not None and self.registration_dialog.winfo_exists():
             self.registration_dialog.lift()
             return

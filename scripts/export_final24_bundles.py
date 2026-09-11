@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import torch
@@ -14,6 +15,8 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 BUNDLES = ROOT / "mph_gait_id/model_bundles"
 METHODS = {
     "pointnet_tmax": "PointNet-TMax",
@@ -100,7 +103,8 @@ def prepare(source_root: Path, run_id: str, seed: int, method: str, output: Path
             model.update(use_coarse_windows=True, use_shifted_windows=False,
                          use_token_transformer=True)
 
-    original = torch.load(source, map_location="cpu", weights_only=False)
+    from mph_gait_id.checkpoint_io import load_checkpoint
+    original = load_checkpoint(source)
     step_key = "iteration" if method == "lidargaitpp" else "epoch"
     if original.get(step_key) != training[step_key]:
         raise ValueError(f"Checkpoint is not the final fixed-budget state: {source}")

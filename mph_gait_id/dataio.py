@@ -23,7 +23,10 @@ def collect_pointcloud_frames(source: str | Path) -> list[Path]:
     source_path = Path(source).expanduser().resolve()
     if not source_path.is_dir():
         raise ValueError(f"Point-cloud input must be an NPY sequence directory: {source_path}")
-    frames = sorted(source_path.glob("clear_data_*.npy"), key=frame_number)
+    frames = sorted(
+        (path for path in source_path.glob("clear_data_*.npy")
+         if POINT_FRAME_RE.fullmatch(path.name)), key=frame_number
+    )
     if not frames:
         raise FileNotFoundError(f"No clear_data_*.npy frames found in {source_path}")
     return frames
@@ -53,8 +56,10 @@ def build_windows(
         raise ValueError("No frames remain after drop_first_frames")
 
     if len(usable) < window_size:
-        starts = [0]
-        selections = [usable + [usable[-1]] * (window_size - len(usable))]
+        raise ValueError(
+            f"Insufficient frames after drop_first_frames: got {len(usable)}, "
+            f"need {window_size}. Short sequences are not padded for enrollment or identification."
+        )
     else:
         starts = list(range(0, len(usable) - window_size + 1, stride))
         last_start = len(usable) - window_size
@@ -106,6 +111,8 @@ class PointCloudWindowDataset(_WindowDataset):
     ) -> None:
         self.source = Path(source).expanduser().resolve()
         self.num_points = int(num_points)
+        if self.num_points < 2:
+            raise ValueError("num_points must be at least 2")
         self.windows = build_windows(
             collect_pointcloud_frames(self.source),
             window_size=int(window_size),
@@ -117,10 +124,13 @@ class PointCloudWindowDataset(_WindowDataset):
         return len(self.windows)
 
     def _load_points(self, path: Path) -> torch.Tensor:
-        points = np.asarray(np.load(path)[:, :3], dtype=np.float32)
+        raw = np.load(path, allow_pickle=False)
+        if raw.ndim != 2 or raw.shape[1] < 3 or raw.dtype.kind not in "fiu":
+            raise ValueError(f"Expected a numeric [N,C>=3] point array: {path}")
+        points = np.asarray(raw[:, :3], dtype=np.float32)
         points = points[np.isfinite(points).all(axis=1)]
-        if len(points) == 0:
-            return torch.zeros(self.num_points, 3, dtype=torch.float32)
+        if len(points) < 2 or not np.any(np.ptp(points, axis=0) > 0):
+            raise ValueError(f"Frame requires at least two distinct finite XYZ points: {path}")
         if len(points) >= self.num_points:
             indices = np.linspace(0, len(points) - 1, self.num_points).round().astype(np.int64)
         else:

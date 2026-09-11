@@ -73,12 +73,6 @@ class SystemModelRuntime:
         self.num_workers = max(0, int(num_workers))
         self.model_record = self._build_model_record()
 
-    def _configured_embedding_dim(self) -> int:
-        embedding_dim = int(self.bundle.model.get("embedding_dim", 256))
-        if self.bundle.architecture == "lidargaitpp_official":
-            embedding_dim *= int(self.bundle.model.get("parts_num", 1))
-        return embedding_dim
-
     def _build_model_record(self, embedding_dim: int | None = None) -> dict[str, Any]:
         return build_model_record(
             self.bundle, self.model_store, self.runtime_clip_len,

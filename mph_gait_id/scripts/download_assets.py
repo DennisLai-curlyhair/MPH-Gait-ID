@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
-import shutil
 import sys
 import tempfile
 import urllib.request
@@ -37,41 +36,25 @@ def valid(path: Path, expected: str) -> bool:
     return path.is_file() and sha256(path) == expected
 
 
-def download_url(url: str, target: Path) -> None:
+def download_url(url: str, target: Path, expected_sha256: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(delete=False, dir=target.parent) as handle:
         temporary = Path(handle.name)
     try:
         urllib.request.urlretrieve(url, temporary)
+        if sha256(temporary) != expected_sha256:
+            raise RuntimeError("Downloaded file failed SHA256 verification; existing file retained")
         temporary.replace(target)
     finally:
         if temporary.exists():
             temporary.unlink()
 
 
-def download_ultralytics(model_id: str, target: Path) -> None:
-    try:
-        from ultralytics import YOLO
-    except Exception as exc:
-        raise RuntimeError(
-            "Install requirements-realtime.txt before downloading YOLO assets"
-        ) from exc
-    with tempfile.TemporaryDirectory(prefix="gait-yolo-") as raw:
-        previous = Path.cwd()
-        try:
-            os.chdir(raw)
-            model = YOLO(model_id)
-            candidates = [
-                Path(raw) / model_id,
-                Path(str(getattr(model, "ckpt_path", ""))),
-            ]
-            source = next((item for item in candidates if item.is_file()), None)
-            if source is None:
-                raise RuntimeError(f"Ultralytics did not expose downloaded {model_id}")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
-        finally:
-            os.chdir(previous)
+def download_ultralytics(model_id: str, target: Path, expected_sha256: str) -> None:
+    if model_id not in {"yolov8n.pt", "yolov8n-seg.pt"}:
+        raise ValueError("Only the pinned YOLOv8n detector and segmenter are supported")
+    url = f"https://github.com/ultralytics/assets/releases/download/v0.0.0/{model_id}"
+    download_url(url, target, expected_sha256)
 
 
 def asset_url(asset: dict[str, Any]) -> str | None:
@@ -110,7 +93,7 @@ def main() -> int:
         provider = str(asset.get("provider"))
         try:
             if provider == "ultralytics":
-                download_ultralytics(str(asset["model_id"]), target)
+                download_ultralytics(str(asset["model_id"]), target, expected)
             else:
                 url = asset_url(asset)
                 if not url:
@@ -118,7 +101,7 @@ def main() -> int:
                         "Set GAIT_IDENTITY_ASSET_BASE_URL to the project Release/Hugging "
                         "Face asset directory, or place this checkpoint manually"
                     )
-                download_url(url, target)
+                download_url(url, target, expected)
             if not valid(target, expected):
                 raise RuntimeError("downloaded file failed SHA256 verification")
             print(f"DOWNLOADED {name}: {target.relative_to(SYSTEM_ROOT)}")

@@ -148,14 +148,8 @@ def _save_result(
     configured = output_root or nested(config, "storage", "output_root", "../outputs")
     root = resolve_system_path(configured)
     output_dir = root / f"{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}_{operation}"
-    output_dir.mkdir(parents=True, exist_ok=False)
-    target = output_dir / "result.json"
-    result["result_path"] = str(target)
-    target.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
-    return target
+    from .report_io import write_result
+    return write_result(output_dir, result)
 
 
 def _print(value: Any) -> None:
@@ -230,7 +224,11 @@ def run(args: argparse.Namespace) -> int:
     else:
         raise AssertionError(f"Unhandled command: {args.command}")
 
-    _save_result(config, args.command, result, output_root=args.output_root)
+    try:
+        _save_result(config, args.command, result, output_root=args.output_root)
+    except (OSError, ValueError, TypeError) as exc:
+        from .report_io import report_warning
+        report_warning(result, exc)
     _print(result)
     return 0
 

@@ -354,15 +354,8 @@ class PerformanceBenchmarkPage(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", lambda _event: self._show_selected())
 
     def set_locale(self, _locale_name: str) -> None:
-        # Dynamic result text remains intact; static labels are rebuilt by the
-        # application-level I18n traversal where message aliases exist.
-        self.title_label.configure(text=self._tr("即時效率測試", "Live Performance Benchmark"))
-        self.privacy_label.configure(
-            text=self._tr(
-                "只保存數值統計，不保存 RGB、深度、點雲或特徵",
-                "Numeric telemetry only; RGB, depth, point clouds, and embeddings are not saved",
-            )
-        )
+        # Translate in place so active capture, selections and reports survive.
+        self.i18n.apply(self)
 
     def refresh_bundles(self) -> None:
         current = self.bundle_labels.get(self.bundle_var.get())
@@ -601,7 +594,7 @@ class PerformanceBenchmarkPage(ttk.Frame):
                     )
                 else:
                     self.phase_var.set(
-                        self._tr("測量完成", "Complete")
+                        self._tr("測量完成", "Benchmark complete")
                         if progress.phase == "complete"
                         else self._tr("正式測量中", "Measuring")
                     )

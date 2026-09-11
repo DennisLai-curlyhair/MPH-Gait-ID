@@ -130,16 +130,16 @@ Final-24 bundle. Existing gallery entries are retained for their original model.
 
 ## Requirements
 
-Only import trusted checkpoints. The current loader uses unrestricted PyTorch
-pickle loading, and the historical dependency range requires security review.
+Only import trusted checkpoints. Gait checkpoints use restricted state-dictionary
+loading; YOLO checkpoints must match the pinned asset hashes before loading.
 See [Security and local data handling](SECURITY.md) before using custom weights
 or deploying the application.
 
 ### Core Offline Application
 
-- Python 3.10 or 3.11
+- Python 3.10--3.12
 - Tkinter
-- PyTorch 2.x
+- PyTorch >=2.6,<3.0 (CPU regression-tested with 2.10.0)
 - NumPy, OpenCV, Pillow, and PyYAML
 
 On Ubuntu/Debian, Tkinter may require:
@@ -195,12 +195,56 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\mph_gait_id\scripts\run_ui_windows.ps1
 ```
 
-The pinned Windows preset is stored in `requirements-windows.txt`. A different
-PyTorch wheel may be required for newer GPU drivers.
+The Windows preset includes `requirements-cuda.txt`, which pins CUDA 12.6
+builds of PyTorch 2.10.0 and torchvision 0.25.0. Both bootstrap profiles
+install these GPU builds; unavailable wheels cause an installation error
+rather than a CPU fallback. The version pair follows the
+[official PyTorch installation matrix](https://pytorch.org/get-started/previous-versions/).
+A compatible NVIDIA GPU and driver are still required for CUDA execution.
+The old PyTorch 2.0/CUDA 11.7 environment is no longer supported.
+
+Alternatively, in Anaconda Prompt from the repository root:
+
+```bat
+conda create -n mph-gait-id-gpu python=3.11 pip -y
+conda activate mph-gait-id-gpu
+python -m pip install --upgrade pip
+python -m pip install -r requirements-windows.txt
+python -m pip install --no-deps -e .
+python -m pip check
+python -c "import torch; print(torch.__version__, torch.version.cuda); assert torch.cuda.is_available(), 'CUDA unavailable: check the NVIDIA driver and active environment'; x=torch.randn(256,256,device='cuda'); y=x@x; torch.cuda.synchronize(); print('GPU computation OK:', torch.cuda.get_device_name(0))"
+python -m mph_gait_id.ui_app
+```
+
+Expect `2.10.0+cu126` and `12.6`. Generic `requirements.txt` and
+`requirements-realtime.txt` remain platform-neutral; use the Windows preset
+above to guarantee GPU wheels, or combine `-r requirements-cuda.txt` with
+the generic requirements in the same pip command on Linux.
+
+## Upgrading to the Inference-Hardening Branch
+
+This branch introduces versioned Gallery contracts. Back up the complete
+`data/` directory and close all app instances before upgrading. Existing records
+are retained, but legacy descriptors require an explicit compatibility migration
+or re-encoding from saved sources before recognition with the new contract.
+
+Preview without changing the database:
+
+```bash
+python -m mph_gait_id.gallery_migration --db data/gallery.sqlite3
+```
+
+When every entry is ready, run the same command with `--apply`. A SQLite backup
+is created before any changes. Missing historical coordinate metadata is not
+guessed. See [upgrade and local validation](docs/INFERENCE_HARDENING.md) for
+confirmation options, installation, compatibility limits, and tests.
 
 ## Upgrading to v0.3.0
 
-This release adds saved enrollment foreground sources and multi-model
+These instructions describe the earlier v0.3.0 upgrade. For the current branch,
+also complete the contract migration above.
+
+The v0.3.0 release adds saved enrollment foreground sources and multi-model
 registration. Existing model-specific Gallery descriptors remain usable; saved
 source recordings from the source-library version can be reused without
 recapture. Descriptors alone cannot reconstruct the original point clouds.

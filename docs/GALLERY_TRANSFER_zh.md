@@ -46,6 +46,26 @@ bundle 與編碼程式補充比對資訊，請確認它們仍與原本註冊時�
 
 ## 資料內容與保護
 
+### v0.3.0 後的相容性修正
+
+新版 Gallery key 納入座標轉換、模型及輸入設定。舊特徵不會被刪除，
+但必須確認原設定相容後遷移，或透過註冊來源重新編碼。先關閉所有程式，
+備份完整 data 資料夾，再執行唯讀預覽：
+
+```bash
+python -m mph_gait_id.gallery_migration --db data/gallery.sqlite3
+```
+
+所有項目顯示 ready 後，加上 `--apply` 才會建立 SQLite 備份並修改 key。
+遷移保留 embedding 數值、人物、片段 ID、停用狀態與匯入匯出識別紀錄。
+缺少歷史座標紀錄時不會自動猜測；只有確定使用未修改的官方附帶 bundle，
+才能以 `--confirm-legacy-bundle <bundle_id>` 明確確認。自訂或不確定的
+設定應重新編碼。完整流程見 [升級與驗證](INFERENCE_HARDENING.md)。
+
+舊 .mphgallery 若保存相符的 v0.3.0 encoder specification，仍可由原本
+匯入介面使用；缺少證據的包不會混入新 Gallery。Mask 對齊修正不會修復
+舊來源的背景點，更新後建議重新錄製一段驗證，必要時重做註冊。
+
 匯出包只包含版本化 JSON 人物／模型／來源紀錄，以及數值型 FP32 embedding。
 不包含權重、點雲、RGB/depth、完整 session 檔案、A 電腦的來源絕對路徑、
 相機序號、密碼或辨識 threshold。姓名與備註會保留，請自行檢查敏感文字。

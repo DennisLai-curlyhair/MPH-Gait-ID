@@ -1767,7 +1767,9 @@ class RealtimePage(ttk.Frame):
             self.result_var.set(
                 str(result.get("display_name", "Unknown"))
                 if accepted
-                else f"Unknown (candidate: {candidate_name})"
+                else (f"Pending (candidate: {candidate_name})"
+                      if result.get("state") == "accumulating"
+                      else f"Unknown (candidate: {candidate_name})")
             )
             self.result_detail_var.set(
                 f"state={result.get('state')} | similarity="

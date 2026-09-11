@@ -12,8 +12,7 @@ import torch
 from .types import Detection, SensorFrame
 
 
-# The deployed pytorch environment uses Ultralytics 8.0.x. YOLOv8n is the
-# newest small COCO detector that this installed runtime loads reliably.
+# Keep detector weights fixed while upgrading the inference library.
 DEFAULT_YOLO_MODEL = "model_weights/yolov8n.pt"
 DEFAULT_YOLO_SEG_MODEL = "model_weights/yolov8n-seg.pt"
 DEFAULT_SAM_MODEL_TYPE = "vit_b"
@@ -45,6 +44,26 @@ def resolve_yolo_weights_reference(weights: str | Path | None) -> str:
         f"YOLO weights are missing: {candidate}. Select an existing local "
         f"checkpoint or use a pretrained model ID such as {DEFAULT_YOLO_MODEL}."
     )
+
+
+def verified_yolo_checkpoint(reference: str) -> str:
+    """Only audited, hash-pinned YOLO pickles may reach Ultralytics' loader."""
+    from ..scripts.download_assets import load_manifest, download_ultralytics, sha256
+
+    assets = [a for a in load_manifest()["assets"].values() if a["provider"] == "ultralytics"]
+    path = Path(reference)
+    if not path.is_file():
+        asset = next((a for a in assets if a["model_id"] == reference), None)
+        if asset is None:
+            raise ValueError("Unsupported YOLO model ID; use the bundled YOLOv8n weights")
+        path = Path(__file__).resolve().parents[1] / asset["target"]
+        download_ultralytics(reference, path, asset["sha256"])
+    if sha256(path) not in {a["sha256"] for a in assets}:
+        raise ValueError(
+            "Unverified YOLO checkpoint. Only the pinned YOLOv8n/YOLOv8n-seg assets are "
+            "accepted because Ultralytics loads executable Python checkpoint objects."
+        )
+    return str(path.resolve())
 
 
 @lru_cache(maxsize=4)
@@ -109,6 +128,24 @@ def _clamp_bbox(
     )
 
 
+def restore_person_mask(mask: np.ndarray, height: int, width: int) -> np.ndarray:
+    """Restore original-image coordinates, removing any YOLO letterbox padding."""
+    values = np.asarray(mask)
+    if values.ndim != 2 or not values.size or not np.isfinite(values).all():
+        raise ValueError("Invalid YOLO person mask")
+    if values.shape != (height, width):
+        mh, mw = values.shape
+        gain = min(mh / height, mw / width)
+        pad_y, pad_x = (mh - height * gain) / 2, (mw - width * gain) / 2
+        top, bottom = round(pad_y - 0.1), mh - round(pad_y + 0.1)
+        left, right = round(pad_x - 0.1), mw - round(pad_x + 0.1)
+        values = values[top:bottom, left:right]
+        if not values.size:
+            raise ValueError("YOLO mask is empty after letterbox removal")
+        values = cv2.resize(values, (width, height), interpolation=cv2.INTER_NEAREST)
+    return values > 0.5
+
+
 class YoloPersonDetector:
     """Ultralytics YOLO person detector with optional instance masks."""
 
@@ -123,7 +160,7 @@ class YoloPersonDetector:
         bbox_padding: float = 0.03,
         require_mask: bool = False,
     ) -> None:
-        reference = resolve_yolo_weights_reference(weights)
+        reference = verified_yolo_checkpoint(resolve_yolo_weights_reference(weights))
         try:
             from ultralytics import YOLO
         except Exception as exc:
@@ -156,6 +193,7 @@ class YoloPersonDetector:
             "conf": self.confidence,
             "imgsz": self.image_size,
             "verbose": False,
+            "retina_masks": True,
         }
         if self.device:
             kwargs["device"] = self.device
@@ -183,11 +221,7 @@ class YoloPersonDetector:
         if getattr(result, "masks", None) is not None:
             masks = result.masks.data.detach().float().cpu().numpy()
             if selected < len(masks):
-                mask = cv2.resize(
-                    masks[selected],
-                    (width, height),
-                    interpolation=cv2.INTER_NEAREST,
-                ) > 0.5
+                mask = restore_person_mask(masks[selected], height, width)
         if self.require_mask and mask is None:
             raise RuntimeError(
                 "The selected YOLO segmentation mode did not return an instance "

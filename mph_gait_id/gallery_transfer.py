@@ -19,6 +19,7 @@ from .database import GalleryRepository, _utc_now
 from .gallery_provenance import initialize_provenance, is_deleted, portable_uid, restore_record
 from .model_record import build_model_record
 from .model_store import ModelBundle, ModelStore, descriptor_dimension
+from .embedding_contract import encoder_hash, compatible_definition
 
 
 FORMAT = "mph-gait-gallery"
@@ -64,12 +65,7 @@ def _atomic_write(path: Path, payload: bytes) -> None:
 
 
 def _encoder_hash() -> str:
-    root = Path(__file__).parent
-    paths = [root / name for name in ("model_adapter.py", "dataio.py", "runtime.py", "model_record.py")]
-    paths += sorted((root / "models").glob("*.py"))
-    return _hash(b"".join(
-        path.relative_to(root).as_posix().encode() + b"\0" + path.read_bytes().replace(b"\r\n", b"\n") for path in paths
-    ))
+    return encoder_hash()
 
 
 def _bundle_spec(bundle: ModelBundle) -> dict[str, Any]:
@@ -227,10 +223,7 @@ class GalleryTransfer:
                 config = json.loads(row["config_json"])
                 saved = con.execute("SELECT spec_json FROM gallery_transfer_model_specs WHERE model_key=?",
                                     (row["model_key"],)).fetchone()
-                spec = json.loads(saved[0]) if saved else None
-                bundle = self.store.bundles().get(config.get("bundle_id"))
-                if spec is None and bundle and bundle.checkpoint_sha256 == row["checkpoint_sha256"]:
-                    spec = _bundle_spec(bundle)
+                spec = json.loads(saved[0]) if saved else config.get("inference_spec")
                 records["models"].append({"key": row["model_key"], "display_name": row["display_name"],
                                           "compatibility": config.get("compatibility", {}), "bundle_spec": spec})
             for row in con.execute("SELECT * FROM gallery_embeddings ORDER BY embedding_id"):
@@ -277,12 +270,11 @@ class GalleryTransfer:
                 if source["compatibility"]["preprocessing_profile_id"] != self.profile_id:
                     continue
                 spec = source["bundle_spec"]
-                if spec is None or spec != _bundle_spec(bundle):
-                    continue
                 record = build_model_record(bundle, self.store, source["compatibility"]["clip_len"],
                                             source["compatibility"]["drop_first_frames"], self.profile_id,
                                             embedding_dim=descriptor_dimension(bundle))
-                if _space(record) != _space(source):
+                if not compatible_definition(source["compatibility"], record["compatibility"],
+                                             spec, _bundle_spec(bundle)):
                     continue
                 if bundle.bundle_id not in verified:
                     verified[bundle.bundle_id] = self.store.verify(bundle.bundle_id)["valid"]
@@ -426,8 +418,7 @@ class GalleryTransfer:
                         raise ValueError("Local model compatibility collision")
                 else:
                     self.repository.upsert_model(target_model, connection=con)
-                source_model = next(model for model in records["models"] if model["key"] == row["model"])
-                spec_json = _json(source_model["bundle_spec"]).decode()
+                spec_json = _json(target_model["inference_spec"]).decode()
                 saved = con.execute("SELECT spec_json FROM gallery_transfer_model_specs WHERE model_key=?", (key,)).fetchone()
                 if saved and saved[0] != spec_json:
                     raise ValueError("Local encoding contract collision")
