@@ -42,7 +42,9 @@ class TransferDialogLayoutTest(unittest.TestCase):
             root = tk.Tk()
         except tk.TclError as exc:
             self.skipTest(f"Graphical display unavailable: {exc}")
-        root.withdraw()
+        # A transient dialog needs a mapped parent, including under virtual X11.
+        root.geometry("700x450")
+        root.update()
         try:
             for locale in ("en", "zh_TW"):
                 with patch.object(GalleryTransferDialog, "_choose"):

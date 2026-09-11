@@ -80,7 +80,11 @@ class PageLocalizationTest(unittest.TestCase):
             root = tk.Tk()
         except tk.TclError as exc:
             self.skipTest(f"Graphical display unavailable: {exc}")
-        self.addCleanup(root.destroy)
+        def close_root():
+            for timer in root.tk.call("after", "info"):
+                root.tk.call("after", "cancel", timer)
+            root.destroy()
+        self.addCleanup(close_root)
         root.withdraw()
         root._gait_i18n = self.i18n
         window = SimpleNamespace(

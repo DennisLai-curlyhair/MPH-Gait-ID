@@ -5,13 +5,14 @@ from tkinter import ttk
 
 
 class ScrollableFrame(ttk.Frame):
-    """A vertically scrollable ttk frame for controls that exceed window height."""
+    """Scrollable controls with a horizontal fallback for narrow viewports."""
 
     def __init__(
         self,
         master: tk.Misc,
         *,
         width: int = 390,
+        height: int = 250,
         canvas_background: str = "#ffffff",
         frame_style: str = "Panel.TFrame",
     ) -> None:
@@ -19,19 +20,22 @@ class ScrollableFrame(ttk.Frame):
         self.canvas = tk.Canvas(
             self,
             width=width,
+            height=height,
             background=canvas_background,
             borderwidth=0,
             highlightthickness=0,
         )
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.horizontal_scrollbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
         self.content = ttk.Frame(self.canvas, style=frame_style, padding=14)
         self._window_id = self.canvas.create_window(
             (0, 0), window=self.content, anchor="nw"
         )
 
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set, xscrollcommand=self.horizontal_scrollbar.set)
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.scrollbar.grid(row=0, column=1, sticky="ns")
+        self.horizontal_scrollbar.grid(row=1, column=0, sticky="ew")
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
@@ -53,10 +57,21 @@ class ScrollableFrame(ttk.Frame):
         bind(self)
 
     def _update_scroll_region(self, _event: tk.Event[tk.Misc]) -> None:
+        self._fit_content()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _match_content_width(self, event: tk.Event[tk.Misc]) -> None:
-        self.canvas.itemconfigure(self._window_id, width=max(1, int(event.width)))
+        self._fit_content()
+
+    def _fit_content(self) -> None:
+        available = max(1, self.canvas.winfo_width())
+        requested = self.content.winfo_reqwidth()
+        self.canvas.itemconfigure(self._window_id, width=max(available, requested))
+        if requested > available + 1:
+            self.horizontal_scrollbar.grid()
+        else:
+            self.horizontal_scrollbar.grid_remove()
+            self.canvas.xview_moveto(0)
 
     def _on_mousewheel(self, event: tk.Event[tk.Misc]) -> str:
         if getattr(event, "num", None) == 4:

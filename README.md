@@ -48,6 +48,8 @@ and upstream sources.
   temporal-stability thresholds.
 - RGB, foreground point-cloud, FPS, predicted identity, and similarity displays.
 - English and Traditional Chinese UI resources.
+- [Resizable UI and view-state preservation](docs/UI_LAYOUT_PHASE1.md)
+  ([繁體中文](docs/UI_LAYOUT_PHASE1_zh.md)) with bilingual layout checks.
 - Replay and pipeline validation tools for development without Kinect hardware.
 
 The current real-time workflow selects one primary person. It is not a

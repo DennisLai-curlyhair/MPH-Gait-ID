@@ -8,6 +8,7 @@ from tkinter import messagebox, simpledialog, ttk
 from ..controller import GaitApplicationController
 from ..i18n import I18n
 from .gallery_transfer import GalleryTransferDialog
+from .layout import ScrollPosition, WrappedLabel
 
 
 class GalleryManagerPage(ttk.Frame):
@@ -37,6 +38,9 @@ class GalleryManagerPage(ttk.Frame):
         self.person_detail_var = tk.StringVar(value="Select a registered identity")
         self.bundle_labels: dict[str, str] = {}
         self._pass_rows: dict[str, dict[str, Any]] = {}
+        self._pass_scope = None
+        self._summary = {}
+        self._person = {}
         self._build()
         self.refresh_bundles()
 
@@ -56,10 +60,10 @@ class GalleryManagerPage(ttk.Frame):
         ttk.Label(header, text="Gallery Manager", style="Header.TLabel").grid(
             row=0, column=0, sticky="w"
         )
-        ttk.Label(
+        WrappedLabel(
             header,
             text="gallery.description",
-        ).grid(row=1, column=0, sticky="w", pady=(3, 0))
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(3, 0))
 
         filters = ttk.LabelFrame(self, text="Gallery scope", padding=10)
         filters.grid(row=1, column=0, sticky="ew", pady=(12, 10))
@@ -96,8 +100,8 @@ class GalleryManagerPage(ttk.Frame):
         self.processing_version_var.set(
             self.controller.processing_version_name(self.i18n.locale)
         )
-        ttk.Label(filters, textvariable=self.summary_var).grid(
-            row=2, column=0, columnspan=5, sticky="w", pady=(8, 0)
+        WrappedLabel(filters, textvariable=self.summary_var).grid(
+            row=2, column=0, columnspan=5, sticky="ew", pady=(8, 0)
         )
 
         paned = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
@@ -142,8 +146,8 @@ class GalleryManagerPage(ttk.Frame):
 
         passes_group.columnconfigure(0, weight=1)
         passes_group.rowconfigure(1, weight=1)
-        ttk.Label(passes_group, textvariable=self.person_detail_var).grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 7)
+        WrappedLabel(passes_group, textvariable=self.person_detail_var).grid(
+            row=0, column=0, columnspan=2, sticky="ew", pady=(0, 7)
         )
         self.pass_tree = ttk.Treeview(
             passes_group,
@@ -174,10 +178,10 @@ class GalleryManagerPage(ttk.Frame):
         actions.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(9, 0))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
-        ttk.Label(
+        WrappedLabel(
             actions,
             text="gallery.delete_scope_hint",
-        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        ).grid(row=0, column=0, columnspan=2, sticky="ew")
         ttk.Button(
             actions,
             text="Deactivate selected pass",
@@ -312,7 +316,20 @@ class GalleryManagerPage(ttk.Frame):
         display = self.controller.processing_version_name(locale_name)
         self.processing_version_combo.configure(values=[display])
         self.processing_version_var.set(display)
-        self.refresh()
+        self._update_descriptions()
+
+    def _update_descriptions(self) -> None:
+        self.summary_var.set(
+            f"{self.processing_version_var.get()} | T={self.clip_len_var.get()}: "
+            f"{self._summary.get('persons', 0)} " + self._text("人物", "identities") + " / "
+            f"{self._summary.get('active_embeddings', 0)} " + self._text("啟用特徵", "active embeddings")
+        )
+        person_id = self._selected_person_id()
+        self.person_detail_var.set(
+            f"{person_id} | {self._person.get('display_name', '')} | " + self._text(
+                "停用片段仍保留，不參與辨識", "Inactive passes are stored but excluded from recognition")
+            if person_id else self.i18n.tr("Select a registered identity")
+        )
 
     def refresh_bundles(self) -> None:
         current = self._bundle_id()
@@ -348,13 +365,9 @@ class GalleryManagerPage(ttk.Frame):
         if not bundle_id:
             return
         selected_person = self._selected_person_id()
+        position = ScrollPosition.capture(self.person_tree)
         clip_len = int(self.clip_len_var.get())
-        summary = self.controller.database_summary(bundle_id, clip_len=clip_len)
-        self.summary_var.set(
-            f"{self.processing_version_var.get()} | T={clip_len}: "
-            f"{summary.get('persons', 0)} identities / "
-            f"{summary.get('active_embeddings', 0)} active embeddings"
-        )
+        self._summary = self.controller.database_summary(bundle_id, clip_len=clip_len)
         children = self.person_tree.get_children()
         if children:
             self.person_tree.delete(*children)
@@ -384,12 +397,22 @@ class GalleryManagerPage(ttk.Frame):
             self.person_tree.selection_set(first)
             self.person_tree.focus(first)
         self._load_passes()
+        position.restore(self.person_tree)
+
+    @staticmethod
+    def _pass_key(item: dict[str, Any]) -> tuple:
+        return tuple(item.get(key) for key in ("model_key", "source_path", "session_id", "pass_id", "direction"))
 
     def _selected_person_id(self) -> str | None:
         selection = self.person_tree.selection()
         return str(selection[0]) if selection else None
 
     def _load_passes(self) -> None:
+        selected = [self._pass_key(self._pass_rows[iid]) for iid in self.pass_tree.selection()
+                    if iid in self._pass_rows]
+        position = ScrollPosition.capture(self.pass_tree)
+        scope = (self._selected_person_id(), self._bundle_id(), int(self.clip_len_var.get()))
+        same_scope = scope == self._pass_scope
         children = self.pass_tree.get_children()
         if children:
             self.pass_tree.delete(*children)
@@ -397,13 +420,13 @@ class GalleryManagerPage(ttk.Frame):
         person_id = self._selected_person_id()
         bundle_id = self._bundle_id()
         if not person_id or not bundle_id:
-            self.person_detail_var.set("Select a registered identity")
+            self._pass_scope = scope
+            self._person = {}
+            self._update_descriptions()
             return
-        person = self.controller.get_person(person_id) or {}
-        self.person_detail_var.set(
-            f"{person_id} — {person.get('display_name', '')} | "
-            "inactive passes remain stored but are excluded from recognition"
-        )
+        self._pass_scope = scope
+        self._person = self.controller.get_person(person_id) or {}
+        self._update_descriptions()
         rows = self.controller.list_gallery_passes(
             bundle_id,
             person_id,
@@ -431,6 +454,13 @@ class GalleryManagerPage(ttk.Frame):
                     item.get("model_key", ""),
                 ),
             )
+            if same_scope and self._pass_key(item) in selected:
+                self.pass_tree.selection_add(iid)
+                self.pass_tree.focus(iid)
+        if same_scope:
+            position.restore(self.pass_tree)
+        else:
+            ScrollPosition().restore(self.pass_tree)
 
     def _set_selected_pass_active(self, active: bool) -> None:
         if not self._edit_allowed():
