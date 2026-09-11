@@ -221,9 +221,9 @@ Expect `2.10.0+cu126` and `12.6`. Generic `requirements.txt` and
 above to guarantee GPU wheels, or combine `-r requirements-cuda.txt` with
 the generic requirements in the same pip command on Linux.
 
-## Upgrading to the Inference-Hardening Branch
+## Upgrading to v0.4.0
 
-This branch introduces versioned Gallery contracts. Back up the complete
+Version 0.4.0 introduces versioned Gallery contracts. Back up the complete
 `data/` directory and close all app instances before upgrading. Existing records
 are retained, but legacy descriptors require an explicit compatibility migration
 or re-encoding from saved sources before recognition with the new contract.
@@ -241,7 +241,7 @@ confirmation options, installation, compatibility limits, and tests.
 
 ## Upgrading to v0.3.0
 
-These instructions describe the earlier v0.3.0 upgrade. For the current branch,
+These instructions describe the earlier v0.3.0 upgrade. For v0.4.0,
 also complete the contract migration above.
 
 The v0.3.0 release adds saved enrollment foreground sources and multi-model

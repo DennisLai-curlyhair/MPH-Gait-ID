@@ -1,6 +1,7 @@
 # Inference Hardening and Gallery Upgrade
 
-This Conference application branch fixes seven issues identified after v0.3.0.
+Version 0.4.0 fixes seven inference and data-integrity issues identified after v0.3.0,
+along with GPU installation, dependency, localization, and source-playback issues.
 It does not change gait model architectures, weights, research splits or training.
 
 ## Changes
@@ -27,9 +28,13 @@ python mph_gait_id/scripts/doctor.py --realtime
 python mph_gait_id/scripts/download_assets.py --profile realtime-yolo --check
 ```
 
-Windows can use `requirements-windows.txt`; it now shares the supported runtime
-requirements rather than pinning PyTorch 2.0/CUDA 11.7. Install Azure Kinect Sensor
-SDK separately. Do not copy an old virtual environment between computers.
+On Windows, use `python -m pip install -r requirements-windows.txt` followed by
+`python -m pip install --no-deps -e .`. This preset explicitly installs
+torch 2.10.0+cu126 and torchvision 0.25.0+cu126, with no CPU-only fallback.
+A compatible NVIDIA GPU and driver are required for CUDA execution. Install
+Azure Kinect Sensor SDK separately and follow the GPU verification instructions
+in the [README](../README.md#windows-bootstrap). Do not copy an old virtual
+environment between computers.
 
 Gait checkpoint contents must be a tensor state dictionary under `model`, with
 plain configuration metadata. All six distributed gait checkpoints satisfy this
