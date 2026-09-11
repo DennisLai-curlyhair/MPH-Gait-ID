@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Stage D foreground-source export/import using versioned `.mphsources` archives,
+  with multi-source selection, verified previews, explicit person mapping, and
+  deleted-owner restoration. Gallery descriptor transfer remains separate.
+- Preserved source UUIDs, session/pass boundaries, camera XYZ, and preprocessing
+  provenance for playback and Stage C registration on another installation.
+- Cancellable background transfers, bounded data-only archive validation,
+  pre-import SQLite backups, atomic database commits, and import audit records.
+- English/Traditional Chinese source-transfer controls and migration guides.
+- Source-transfer regression tests and a real-checkpoint three-model smoke-test
+  option using synthetic recordings.
+
+### Compatibility
+- Existing recordings and embeddings are retained; no model weights, inference
+  contract hashes, dependencies, or release version are changed.
+- Transfer archives are not encrypted and contain personal biometric data.
+  `.mphsources` and source-transfer backups are excluded from Git.
+- See [Source transfer](docs/SOURCE_TRANSFER.md) for local acceptance checks.
+
 ## 0.4.0
 
 ### Fixed

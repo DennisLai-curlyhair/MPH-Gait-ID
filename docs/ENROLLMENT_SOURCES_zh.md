@@ -100,8 +100,9 @@ OS 檔案鎖限制同一來源庫只有一個寫入者；錄製與 Review 期間
   session JSON、Gallery 舊備份及外部備份的保存政策。
 - 改名後列表顯示目前姓名；manifest 保留拍攝時姓名。ID 後面的 `*` 表示來源
   沒有連結到目前 Gallery 人物。相同可見 ID 被另一人重用，不會承接舊來源。
-- `.mphgallery` 匯出與 Gallery 的 SQLite 備份都不含 NPY。跨設備搬移來源與
-  多模型重新註冊尚未加入。管理員備份時，先停止程式，再一併備份資料庫及
+- `.mphgallery` 匯出與 Gallery 的 SQLite 備份都不含 NPY。跨設備搬移來源請用
+  [階段 D 來源移轉](SOURCE_TRANSFER_zh.md)，再透過[階段 C](SOURCE_REGISTRATION_zh.md)
+  為已安裝的模型建立特徵。管理員完整備份時，先停止程式，再一併備份資料庫及
   對應來源目錄；只有 SQLite 無法回放來源。
 - 資料庫、來源、暫存皆在 Git 忽略規則內，未將人物資料加入專案。資料並未
   加密；請使用適當的 OS 權限、磁碟／備份加密及保存期限。SHA256 是完整性

@@ -139,9 +139,10 @@ reported as errors rather than converted into valid recordings.
   name at capture. `*` after an ID means no current Gallery person is linked.
   Reusing the same visible Person ID does not attach old recordings to a new person.
 - Portable Gallery export/import and its backups do not copy source NPY files.
-  Source transfer and multi-model re-encoding are separate future stages. For an
-  administrative backup, stop the app and back up both the database and its source
-  root; copying only the SQLite database is insufficient for source playback.
+  Use [Stage D source transfer](SOURCE_TRANSFER.md) to move recordings and
+  [Stage C](SOURCE_REGISTRATION.md) to re-encode them for installed models. For a
+  full administrative backup, stop the app and back up both the database and its
+  source root; copying only SQLite is insufficient for source playback.
 - Source paths, recordings, temporary files, and runtime databases are ignored by
   Git. No participant data or existing registrations are included in the project.
   Use trusted local storage, OS permissions, encrypted disks/backups where needed,

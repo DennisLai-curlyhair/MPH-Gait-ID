@@ -42,7 +42,9 @@ bundle 與編碼程式補充比對資訊，請確認它們仍與原本註冊時�
 安裝相符 bundle 後，可以再次匯入該檔案；已完成的資料會略過。
 更換 checkpoint／編碼方法時仍需重新註冊。只有 embedding 的舊即時紀錄
 無法還原原始點雲。階段 B 已提供選擇性的[註冊前景點雲保存](ENROLLMENT_SOURCES_zh.md)，
-但來源不包含在此匯出包或單獨的 SQLite 備份內；跨模型重新編碼仍屬後續階段 C。
+但來源不包含在此匯出包或單獨的 SQLite 備份內；請使用[階段 D](SOURCE_TRANSFER_zh.md)
+移轉來源，再透過[階段 C](SOURCE_REGISTRATION_zh.md)跨模型重新編碼。
+來源包與 Gallery 包可依任意順序匯入，共用人物可攜式識別碼。
 
 ## 資料內容與保護
 

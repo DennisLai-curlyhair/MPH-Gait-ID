@@ -53,6 +53,18 @@ Review 選取的來源索引與 embeddings 共用 SQLite transaction；檔案先
 
 ## Gallery
 
+### 來源點雲移轉
+
+階段 D 由 `source_transfer.py` 的 `SourceTransfer` 與 `ui/source_transfer.py`
+的背景工作視窗負責。`.mphsources` 只包含已提交來源的白名單 manifest 與數值型
+NPY，不載入模型；來源 UUID、人物 transfer UID、session/pass ID 與時間邊界皆保留。
+預覽驗證封包後，匯入重新檢查封包／資料庫快照，先將點雲寫到 staging 並備份
+SQLite，再以單一 transaction 提交人物對應及來源索引。沿用 writer lease 阻止
+錄製、刪除、清理與編碼並行，共用階段 A 的人物刪除／還原歷史；不改 Gallery
+embeddings 或模型相容性契約。詳見[來源移轉](SOURCE_TRANSFER_zh.md)。
+
+### 特徵管理
+
 Gallery Manager 以目前 model bundle、Frame 長度和點雲處理版本顯示資料。可停用或恢復單一來源／pass，也可停用某人物在目前相容性範圍內的全部特徵。
 
 ## 即時效率測試
