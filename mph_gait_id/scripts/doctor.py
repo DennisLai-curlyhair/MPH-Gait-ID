@@ -40,6 +40,7 @@ def main() -> int:
         ("PIL", "Pillow", ">=10.0,<11.0"),
         ("yaml", "PyYAML", ">=6.0,<7.0"),
         ("torch", "torch", ">=2.6,<3.0"),
+        ("einops", "einops", ">=0.8.2,<0.9"),
     )
     for module_name, distribution, specification in core_modules:
         try:

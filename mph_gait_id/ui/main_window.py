@@ -380,7 +380,7 @@ class GaitIdentityWindow:
         header = ttk.Frame(parent, padding=(18, 14, 18, 10))
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(1, weight=1)
-        ttk.Label(header, text="步態身分辨識系統", style="Header.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="offline.title", style="Header.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(header, textvariable=self.status_var, foreground=COLORS["muted"]).grid(
             row=0, column=1, sticky="e"
         )
