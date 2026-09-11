@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 ### Fixed
 - Restricted gait checkpoint loading with a patched PyTorch minimum; verified
@@ -12,13 +12,30 @@
 - Offline enrollment rejects invalid point frames and incomplete windows.
 - Inactive source ownership and duplicate checks are enforced in the write transaction.
 - Failed JSON report writes no longer report committed enrollments as failures.
+- Added the missing einops dependency required by LidarGait++ and its environment check.
+- Fixed English/Traditional Chinese switching for Offline titles and Performance
+  settings, section titles, controls, headings, and fixed status messages.
+- Fixed enrollment-source playback scheduling by removing the registration
+  action's name collision with Tkinter's internal callback registration method.
+
+### Installation
+- The Windows preset and both Windows bootstrap profiles explicitly install
+  torch 2.10.0+cu126 and torchvision 0.25.0+cu126. Missing GPU wheels cause an
+  installation error rather than a CPU-only fallback.
+- CUDA execution still requires a compatible NVIDIA GPU and driver. Generic
+  requirements remain platform-neutral; Python 3.10--3.12 is supported.
 
 ### Upgrade
-- The Windows PyTorch 2.0/CUDA 11.7 preset is retired; use PyTorch >=2.6,<3.0 and
-  the pinned Ultralytics 8.3.221 runtime with a locally matched torchvision build.
+- The Windows PyTorch 2.0/CUDA 11.7 preset is retired. Use the updated Windows
+  preset in a fresh environment; Ultralytics remains pinned to 8.3.221.
 - Back up data and preview the explicit Gallery contract migration before use.
   No model weights or source recordings are rewritten. See
   [Inference hardening](docs/INFERENCE_HARDENING.md) for migration and local tests.
+
+### Validation
+- 177 automated application tests passed; five display-dependent GUI tests
+  were skipped on the server. Playback callbacks were tested with real Tcl timers.
+- Local application testing was completed successfully before release preparation.
 
 ## 0.3.0
 
