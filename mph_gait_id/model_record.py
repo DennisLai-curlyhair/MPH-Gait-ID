@@ -5,7 +5,8 @@ import hashlib
 import json
 from typing import Any
 
-from .model_store import ModelBundle, ModelStore
+from .model_store import ModelBundle, ModelStore, descriptor_dimension
+from .embedding_contract import bundle_spec, json_hash
 
 
 def build_model_record(
@@ -16,15 +17,19 @@ def build_model_record(
     preprocessing_profile_id: str,
     embedding_dim: int | None = None,
 ) -> dict[str, Any]:
-    dimension = int(bundle.model.get("embedding_dim", 256))
-    if bundle.architecture == "lidargaitpp_official":
-        dimension *= int(bundle.model.get("parts_num", 1))
+    dimension = descriptor_dimension(bundle)
     dimension = int(embedding_dim or dimension)
     try:
         checkpoint = str(bundle.checkpoint.relative_to(store.root.parent))
     except ValueError:
         checkpoint = str(bundle.checkpoint)
+    spec = bundle_spec(bundle)
     compatibility = {
+        "contract_version": 2,
+        "coordinate_adapter": str(bundle.data.get("coordinate_adapter", "none")),
+        "input_channels": bundle.channels,
+        "input_config_sha256": json_hash(spec["data"]),
+        "model_config_sha256": json_hash(bundle.model),
         "bundle_id": bundle.bundle_id,
         "method_key": bundle.method_key,
         "architecture": bundle.architecture,
@@ -54,5 +59,6 @@ def build_model_record(
         "checkpoint_sha256": bundle.checkpoint_sha256,
         "embedding_dim": dimension,
         "compatibility": compatibility,
+        "inference_spec": spec,
         "research_fold_checkpoint": bundle.fold >= 0,
     }

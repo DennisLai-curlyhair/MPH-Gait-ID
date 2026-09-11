@@ -11,10 +11,18 @@ these independent source recordings or previous backups. See
 ## Checkpoints Are Trusted Inputs
 
 The application is a local research prototype, not a sandbox for unknown model
-files. Its current model store and adapter use unrestricted PyTorch checkpoint
-loading (`weights_only=False`) for compatibility with research checkpoints.
-Importing a malicious checkpoint can execute code before its architecture or
-metadata is validated. Only import weights from a trusted source.
+files. Gait imports, inference, and the Final-24 export helper use
+`torch.load(weights_only=True)`, require a state dictionary of finite dense
+tensors, and never fall back to unrestricted loading. Unsupported serialized
+Python objects are rejected. Only import weights from a trusted source;
+restricted loading is not a resource-exhaustion sandbox.
+
+Ultralytics uses executable Python checkpoint objects internally. The app permits
+only the hash-pinned YOLOv8n and YOLOv8n-seg assets, verified before constructing
+YOLO. Renaming a different checkpoint does not bypass this check. Downloads are
+verified as bytes before replacing an asset; downloading no longer loads a model.
+SAM remains restricted to the pinned official ViT-B checkpoint. Supporting other
+detectors requires an explicit asset and compatibility review.
 
 Bundled assets have SHA256 values in `mph_gait_id/assets/manifest.yaml` and
 bundle metadata. Verify them with:
@@ -30,20 +38,29 @@ importer as a network service accepting untrusted uploads.
 
 ## Dependency Limitations
 
-The current package range (`torch>=2.0,<2.6`) and pinned Windows preset
-(`torch==2.0.1+cu117`) are historical compatibility settings, not a hardened
-dependency baseline. They include versions affected by
+The required PyTorch range is `>=2.6,<3.0`; the loader rejects older versions
+before deserialization. This removes the former range affected by
 [CVE-2025-32434](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6).
 That advisory reports a restricted-loading bypass in versions through 2.5.1,
 fixed for that issue in 2.6.0. Simply changing `weights_only` in an affected
 version is not an adequate mitigation, and upgrading PyTorch does not make
 unrestricted pickle loading safe.
 
-A secure-loader and dependency migration requires compatibility tests for all
-bundled models, Ultralytics, CUDA, and Kinect capture. The current repository
-does not claim this migration is complete. Keep inputs trusted and isolate the
-research environment from credentials or other sensitive workloads. Review
-current advisories for all installed dependencies before deployment.
+The detector package is pinned to Ultralytics 8.3.221. Six gait checkpoints and
+the bundled detector weights have CPU compatibility checks; CUDA and physical
+Kinect capture still require local validation. The minimum PyTorch version
+addresses the cited issue, not every possible present or future advisory.
+Keep the environment patched, keep inputs trusted, and review advisories for
+all installed dependencies before deployment.
+
+## Embedding Compatibility
+
+New Gallery keys include coordinate convention, input configuration and model
+configuration hashes. Recorded encoder specifications are preserved on export.
+Legacy compatibility is limited to the audited v0.3.0 encoder and the tested
+migration target. Unknown definitions fail closed; no descriptors are deleted.
+See [migration instructions](docs/INFERENCE_HARDENING.md). Neither a matching
+feature contract nor temporal stability establishes calibrated biometric accuracy.
 
 ## Gallery and Captured Data
 

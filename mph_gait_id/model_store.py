@@ -8,10 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import torch
 import yaml
 
 from .config import SYSTEM_ROOT
+from .checkpoint_io import load_checkpoint as _torch_load
 
 
 DEFAULT_BUNDLE_ROOT = SYSTEM_ROOT / "model_bundles"
@@ -29,13 +29,6 @@ def sha256_file(path: str | Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _torch_load(path: str | Path, map_location: str = "cpu") -> Any:
-    try:
-        return torch.load(path, map_location=map_location, weights_only=False)
-    except TypeError:
-        return torch.load(path, map_location=map_location)
 
 
 @dataclass(frozen=True)

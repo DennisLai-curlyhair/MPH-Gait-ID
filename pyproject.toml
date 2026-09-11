@@ -13,14 +13,14 @@ dependencies = [
   "opencv-python>=4.8,<4.11",
   "Pillow>=10.0,<11.0",
   "PyYAML>=6.0,<7.0",
-  "torch>=2.0,<2.6",
+  "torch>=2.6,<3.0",
   "packaging>=23.0,<25.0",
 ]
 
 [project.optional-dependencies]
 realtime = [
   "pyk4a==1.5.0",
-  "ultralytics==8.0.173",
+  "ultralytics==8.3.221",
 ]
 sam = [
   "segment-anything @ https://github.com/facebookresearch/segment-anything/archive/6fdee8f2727f4506cfbbe553e23b895e27956588.zip",

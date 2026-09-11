@@ -39,7 +39,7 @@ def main() -> int:
         ("cv2", "opencv-python", ">=4.8,<4.11"),
         ("PIL", "Pillow", ">=10.0,<11.0"),
         ("yaml", "PyYAML", ">=6.0,<7.0"),
-        ("torch", "torch", ">=2.0,<2.6"),
+        ("torch", "torch", ">=2.6,<3.0"),
     )
     for module_name, distribution, specification in core_modules:
         try:
@@ -68,7 +68,7 @@ def main() -> int:
         record("model_bundles", False, f"{type(exc).__name__}: {exc}")
     if args.realtime:
         realtime_modules = (
-            ("ultralytics", "ultralytics", "==8.0.173"),
+            ("ultralytics", "ultralytics", "==8.3.221"),
             ("pyk4a", "pyk4a", "==1.5.0"),
         )
         for module_name, distribution, specification in realtime_modules:

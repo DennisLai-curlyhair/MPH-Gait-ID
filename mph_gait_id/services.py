@@ -136,7 +136,10 @@ class RegistrationService:
             selected = _even_indices(
                 batch.embeddings.shape[0], max_embeddings_per_source
             )
-            embeddings = _normalize(batch.embeddings[selected])
+            values = batch.embeddings[selected]
+            if not np.isfinite(values).all() or np.any(np.linalg.norm(values, axis=1) <= 1e-12):
+                raise ValueError(f"Embeddings must be finite and nonzero for source: {source}")
+            embeddings = _normalize(values)
             if not np.isfinite(embeddings).all():
                 raise ValueError(f"Embeddings contain NaN or Inf for source: {source}")
             selected_sources.append(
@@ -167,6 +170,27 @@ class RegistrationService:
         source_results: list[dict[str, Any]] = []
         selected_matrices: list[np.ndarray] = []
         with self.repository.connect() as connection:
+            # Recheck while holding the writer lock; another process may have
+            # enrolled a source during feature extraction.
+            connection.execute("BEGIN IMMEDIATE")
+            owner = connection.execute(
+                "SELECT display_name FROM persons WHERE person_id=?", (person_id,)
+            ).fetchone()
+            if owner is not None and owner["display_name"] != display_name:
+                raise ValueError("Person name changed during enrollment; refresh the Gallery")
+            for item in selected_sources:
+                matches = connection.execute(
+                    "SELECT DISTINCT person_id FROM gallery_embeddings WHERE model_key=? "
+                    "AND (source_path=? OR source_fingerprint=?)",
+                    (model_key, item["source"], item["source_fingerprint"]),
+                ).fetchall()
+                if any(row["person_id"] != person_id for row in matches):
+                    raise ValueError("This source belongs to another person, including inactive features")
+                if matches and not allow_duplicate_source:
+                    raise ValueError(
+                        "Source already enrolled, including inactive features. "
+                        "Reactivate existing features instead of enrolling duplicate content."
+                    )
             self.repository.upsert_person(
                 person_id, display_name, note, connection=connection
             )

@@ -1203,6 +1203,9 @@ class GaitIdentityWindow:
     ) -> None:
         self.current_outcome = outcome
         result = outcome.result
+        if result.get("report_warning") and append_log:
+            self._append_log(str(result["report_warning"]))
+            messagebox.showwarning("Report warning", str(result["report_warning"]))
         if add_to_history:
             self._add_outcome_history(outcome)
         self.preview.load(outcome)

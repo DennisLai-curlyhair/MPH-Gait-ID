@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Restricted gait checkpoint loading with a patched PyTorch minimum; verified
+  YOLO assets before deserialization and checked downloads before replacement.
+- YOLO masks now use original-image coordinates with letterbox-aware fallback.
+- Versioned coordinate/input/model Gallery contracts and configuration-aware
+  runtime caching; correct nested LidarGait++ descriptor dimensions at startup.
+- Provisional identity matches no longer count as accepted before stability.
+- Offline enrollment rejects invalid point frames and incomplete windows.
+- Inactive source ownership and duplicate checks are enforced in the write transaction.
+- Failed JSON report writes no longer report committed enrollments as failures.
+
+### Upgrade
+- The Windows PyTorch 2.0/CUDA 11.7 preset is retired; use PyTorch >=2.6,<3.0 and
+  the pinned Ultralytics 8.3.221 runtime with a locally matched torchvision build.
+- Back up data and preview the explicit Gallery contract migration before use.
+  No model weights or source recordings are rewritten. See
+  [Inference hardening](docs/INFERENCE_HARDENING.md) for migration and local tests.
+
 ## 0.3.0
 
 ### Added

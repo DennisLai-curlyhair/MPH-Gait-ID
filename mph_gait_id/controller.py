@@ -60,7 +60,7 @@ class GaitApplicationController:
                 display_name=bundle.display_name,
             )
         self._runtime_cache: dict[
-            tuple[str, str, int, int, str], SystemModelRuntime
+            tuple[str, str, int, int, str, str], SystemModelRuntime
         ] = {}
         self._runtime_lock = threading.RLock()
 
@@ -451,12 +451,19 @@ class GaitApplicationController:
             num_workers if num_workers is not None else nested(self.config, "runtime", "num_workers", 0)
         )
         profile_id = self.processing_version_id()
+        from .embedding_contract import json_hash
+        bundle = self.model_store.get(bundle_id)
+        definition_hash = json_hash({"checkpoint_sha256": bundle.checkpoint_sha256,
+                                     "architecture": bundle.architecture,
+                                     "channels": bundle.channels,
+                                     "data": bundle.data, "model": bundle.model})
         key = (
             bundle_id,
             str(device),
             effective_batch,
             effective_workers,
             profile_id,
+            definition_hash,
         )
         with self._runtime_lock:
             runtime = self._runtime_cache.get(key)
@@ -501,17 +508,15 @@ class GaitApplicationController:
         elapsed = time.perf_counter() - started
         result["elapsed_seconds"] = elapsed
         result["source_adapter"] = prepared.metadata()
-        self._save_result(operation, result)
+        try:
+            self._save_result(operation, result)
+        except (OSError, ValueError, TypeError) as exc:
+            from .report_io import report_warning
+            report_warning(result, exc)
         return OperationOutcome(operation, result, prepared, elapsed)
 
     def _save_result(self, operation: str, result: dict[str, Any]) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         output_dir = self.output_root / f"{timestamp}_ui_{operation}"
-        output_dir.mkdir(parents=True, exist_ok=False)
-        target = output_dir / "result.json"
-        result["result_path"] = str(target)
-        target.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
-            encoding="utf-8",
-        )
-        return target
+        from .report_io import write_result
+        return write_result(output_dir, result)

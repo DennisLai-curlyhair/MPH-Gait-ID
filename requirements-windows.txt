@@ -1,11 +1,5 @@
-# Windows/Python 3.10 Azure Kinect dependency preset.
-# Install Azure Kinect Sensor SDK 1.4.1 separately before PyK4A.
---extra-index-url https://download.pytorch.org/whl/cu117
-numpy==1.24.4
-opencv-python==4.8.1.78
-Pillow==10.0.1
-PyYAML==6.0.1
-torch==2.0.1+cu117
-packaging==24.0
-pyk4a==1.5.0
-ultralytics==8.0.173
+# Windows/Python 3.10-3.12 Azure Kinect dependencies.
+# Install Sensor SDK 1.4.1 separately. Install a matched torch/torchvision
+# pair from https://pytorch.org/get-started/locally/ for the local GPU first.
+# Do not reuse the retired PyTorch 2.0/CUDA 11.7 environment.
+-r requirements-realtime.txt

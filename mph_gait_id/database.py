@@ -381,7 +381,6 @@ class GalleryRepository:
                     FROM gallery_embeddings
                     WHERE
                         model_key = ?
-                        AND active = 1
                         AND (source_path = ? OR source_fingerprint = ?)
                     LIMIT 1
                     """,
@@ -392,7 +391,7 @@ class GalleryRepository:
                     """
                     SELECT person_id, source_path, source_fingerprint
                     FROM gallery_embeddings
-                    WHERE model_key = ? AND source_path = ? AND active = 1
+                    WHERE model_key = ? AND source_path = ?
                     LIMIT 1
                     """,
                     (model_key, source),

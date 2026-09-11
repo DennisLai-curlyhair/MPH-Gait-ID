@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -8,17 +7,11 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 
 from .model_store import ModelBundle, sha256_file
+from .checkpoint_io import load_checkpoint as _torch_load
 from .models.lidargaitpp import build_model as build_lidargaitpp_model
 from .models.mph_gait import build_model as build_mph_model
 from .models.pc_v1 import build_model as build_pc_v1_model
 from .models.pointcloud import build_model as build_pointcloud_model
-
-
-def _torch_load(path: str | Path, map_location: torch.device | str = "cpu") -> Any:
-    try:
-        return torch.load(path, map_location=map_location, weights_only=False)
-    except TypeError:
-        return torch.load(path, map_location=map_location)
 
 
 def resolve_device(device_name: str) -> torch.device:
@@ -48,7 +41,11 @@ class ModelAdapter:
         checkpoint = _torch_load(bundle.checkpoint, map_location=self.device)
         checkpoint_config = checkpoint.get("config", {}) if isinstance(checkpoint, dict) else {}
         checkpoint_model = checkpoint_config.get("model", {}) if isinstance(checkpoint_config, dict) else {}
-        model_config = dict(checkpoint_model or bundle.model)
+        if not isinstance(checkpoint_model, dict):
+            raise ValueError("Checkpoint model config must be a mapping")
+        if any(value != bundle.model.get(key) for key, value in checkpoint_model.items()):
+            raise ValueError("Checkpoint model config differs from bundle.yaml; re-import a matching bundle")
+        model_config = dict(bundle.model)
         if bundle.input_type != "pointcloud":
             raise ValueError(
                 "This application only supports point-cloud model bundles, "
@@ -118,6 +115,8 @@ class ModelAdapter:
                     "including after FP32 inference. Verify that the selected folder contains "
                     f"{self.bundle.mode} data produced by the expected preprocessing pipeline."
                 )
+            if bool((raw_embedding.norm(dim=1) <= 1e-12).any()):
+                raise RuntimeError(f"The model produced a zero-length descriptor in batch {batch_index}")
             embedding = F.normalize(raw_embedding.cpu(), dim=1)
             if not bool(torch.isfinite(embedding).all().item()):
                 raise RuntimeError(
@@ -141,6 +140,13 @@ class ModelAdapter:
                 f"Expected point cloud [B,T,N,C>=3], got {tuple(values.shape)}"
             )
         values = values[..., :3]
+        if min(values.shape[:3]) == 0 or values.shape[2] < 2:
+            raise ValueError("Point-cloud batches require nonempty windows and at least two points")
+        if not bool(torch.isfinite(values).all()):
+            raise ValueError("Point-cloud input contains NaN or Inf")
+        spread = values.amax(dim=2) - values.amin(dim=2)
+        if bool((spread.abs().amax(dim=-1) == 0).any()):
+            raise ValueError("Point-cloud input contains an empty or degenerate frame")
         adapter = str(self.bundle.data.get("coordinate_adapter", "none"))
         if adapter == "kinect_xyz_mm_to_forward_lateral_height_m_v1":
             x, y, z = values.unbind(dim=-1)
@@ -174,6 +180,8 @@ class ModelAdapter:
             self.fp32_fallback_count += 1
         if not bool(torch.isfinite(raw).all().item()):
             raise RuntimeError("The live model produced NaN or Inf embeddings")
+        if bool((raw.norm(dim=1) <= 1e-12).any()):
+            raise RuntimeError("The live model produced a zero-length descriptor")
         return F.normalize(raw.float(), dim=1).cpu()
 
     def manifest(self) -> dict[str, Any]:
