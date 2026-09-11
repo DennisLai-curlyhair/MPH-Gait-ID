@@ -140,14 +140,20 @@ class SourceTransferDialog(tk.Toplevel):
         for button in self.edit_buttons:
             button.configure(state="disabled")
         self.close_button.configure(text=self.tr("Cancel", "取消"))
-        self.status.set(self.tr("Validating / transferring sources...", "正在驗證／移轉來源點雲..."))
+        labels = {
+            "preview": self.tr("Verifying package; no data imported", "正在驗證資料包，尚未匯入"),
+            "export": self.tr("Packaging selected sources", "正在打包選取來源"),
+            "import": self.tr("Importing sources; waiting for transaction completion", "正在匯入來源，等待交易完成"),
+        }
+        self.status.set(labels[operation])
         self.progress.start(15)
         self.worker.start(task)
 
     def _poll(self):
         for message in self.worker.drain():
             if message.kind == "progress":
-                self.status.set(self.tr("Processed frames: ", "已處理幀數：") + str(message.payload))
+                if not self.cancel_event.is_set():
+                    self.status.set(self.tr("Processed frames: ", "已處理幀數：") + str(message.payload))
                 continue
             if message.kind not in {"result", "error"}:
                 continue

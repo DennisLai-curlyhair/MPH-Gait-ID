@@ -76,9 +76,8 @@ def _checkpoint_sha256(path: str, size: int, modified_ns: int) -> str:
     return digest.hexdigest()
 
 
-def resolve_sam_checkpoint(checkpoint: str | Path | None) -> str:
-    """Resolve the local Meta SAM checkpoint shipped with or selected in the app."""
-
+def resolve_sam_checkpoint_path(checkpoint: str | Path | None) -> str:
+    """Check the local path only; the detector verifies its hash before loading."""
     raw = str(checkpoint or "").strip()
     candidate = Path(raw).expanduser() if raw else DEFAULT_SAM_CHECKPOINT
     if not candidate.is_absolute():
@@ -90,7 +89,12 @@ def resolve_sam_checkpoint(checkpoint: str | Path | None) -> str:
             f"SAM checkpoint is missing: {candidate}. Download the official Meta "
             "sam_vit_b_01ec64.pth checkpoint or select an existing local file."
         )
-    candidate = candidate.resolve()
+    return str(candidate.resolve())
+
+
+def resolve_sam_checkpoint(checkpoint: str | Path | None) -> str:
+    """Verify the local Meta SAM checkpoint before deserialization."""
+    candidate = Path(resolve_sam_checkpoint_path(checkpoint))
     stat = candidate.stat()
     actual_hash = _checkpoint_sha256(
         str(candidate),

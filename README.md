@@ -50,6 +50,8 @@ and upstream sources.
 - English and Traditional Chinese UI resources.
 - [Resizable UI and view-state preservation](docs/UI_LAYOUT_PHASE1.md)
   ([繁體中文](docs/UI_LAYOUT_PHASE1_zh.md)) with bilingual layout checks.
+- [Readiness checks and workflow feedback](docs/UI_WORKFLOW_PHASE2.md)
+  ([繁體中文](docs/UI_WORKFLOW_PHASE2_zh.md)) for guided enrollment and batch jobs.
 - Replay and pipeline validation tools for development without Kinect hardware.
 
 The current real-time workflow selects one primary person. It is not a
