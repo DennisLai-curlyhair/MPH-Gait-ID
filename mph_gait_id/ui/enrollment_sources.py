@@ -21,6 +21,7 @@ class EnrollmentSourcesPage(ttk.Frame):
         self.on_gallery_changed = on_gallery_changed or (lambda: None)
         self.prepare_encoding = prepare_encoding or (lambda: None)
         self.registration_dialog = None
+        self.transfer_dialog = None
         self.library = EnrollmentSourceLibrary(controller.repository)
         self.can_edit = can_edit
         self.i18n = getattr(self.winfo_toplevel(), "_gait_i18n", I18n("en"))
@@ -49,6 +50,13 @@ class EnrollmentSourcesPage(ttk.Frame):
             button = ttk.Button(toolbar, command=command)
             button.grid(row=0, column=i, padx=4)
             self._labels.append((button, zh, en))
+        for col, (zh, en, operation) in enumerate([
+            ("匯出選取來源", "Export selected sources", "export"),
+            ("匯入來源點雲", "Import sources", "import"),
+        ]):
+            button = ttk.Button(toolbar, command=lambda op=operation: self._open_transfer(op))
+            button.grid(row=1, column=col * 2, columnspan=2, sticky="ew", padx=4, pady=(6, 0))
+            self._labels.append((button, zh, en))
         ttk.Label(self, textvariable=self.summary).grid(row=2, column=0, sticky="w", pady=6)
         panes = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
         panes.grid(row=1, column=0, sticky="nsew")
@@ -58,7 +66,7 @@ class EnrollmentSourcesPage(ttk.Frame):
         listing.columnconfigure(0, weight=1)
         listing.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(listing, columns=("person", "name", "passes", "frames", "size", "date"),
-                                 show="headings", selectmode="browse")
+                                 show="headings", selectmode="extended")
         for key, width in [("person", 100), ("name", 140), ("passes", 60), ("frames", 75),
                            ("size", 85), ("date", 170)]:
             self.tree.column(key, width=width, minwidth=width, stretch=False)
@@ -215,7 +223,28 @@ class EnrollmentSourcesPage(ttk.Frame):
     @property
     def busy(self):
         return self.worker.busy or bool(
+            self.transfer_dialog is not None and self.transfer_dialog.winfo_exists()) or bool(
             self.registration_dialog is not None and self.registration_dialog.running)
+
+    def _open_transfer(self, operation):
+        if self.transfer_dialog is not None and self.transfer_dialog.winfo_exists():
+            self.transfer_dialog.lift()
+            return
+        allowed, reason = self.can_edit()
+        if not allowed or self.busy:
+            messagebox.showwarning(self._t("暫時無法操作", "Unavailable"), reason or "Operation in progress", parent=self)
+            return
+        selected = tuple(self.tree.selection())
+        if operation == "export" and not selected:
+            messagebox.showinfo(self._t("選取來源", "Select sources"),
+                               self._t("請先選取要匯出的來源。", "Select the source recordings to export."), parent=self)
+            return
+        self.pause()
+        try:
+            from .source_transfer import SourceTransferDialog
+            self.transfer_dialog = SourceTransferDialog(self, operation, selected)
+        except Exception as exc:
+            messagebox.showerror(self._t("操作失敗", "Operation failed"), str(exc), parent=self)
 
     def _open_model_registration(self):
         if self.registration_dialog is not None and self.registration_dialog.winfo_exists():
@@ -225,9 +254,9 @@ class EnrollmentSourcesPage(ttk.Frame):
         if not allowed or self.busy:
             messagebox.showwarning(self._t("暫時無法操作", "Unavailable"), reason or "Operation in progress", parent=self)
             return
-        if self.source_id is None:
+        if self.source_id is None or len(self.tree.selection()) != 1:
             messagebox.showinfo(self._t("選取來源", "Select source"),
-                               self._t("請先選取一筆註冊來源。", "Select an enrollment source first."), parent=self)
+                               self._t("請選取單筆註冊來源。", "Select exactly one enrollment source."), parent=self)
             return
         try:
             from .source_registration import SourceRegistrationDialog
@@ -250,6 +279,10 @@ class EnrollmentSourcesPage(ttk.Frame):
 
     def _delete(self):
         selection = self.tree.selection()
+        if len(selection) > 1:
+            messagebox.showinfo(self._t("選取來源", "Select source"),
+                               self._t("刪除時請選取單筆來源。", "Select exactly one recording to delete."), parent=self)
+            return
         if selection:
             self._mutate(lambda: self.library.delete(selection[0]), self._t(
                 "永久刪除此來源點雲？Gallery 特徵不會刪除，無法從特徵還原點雲。",

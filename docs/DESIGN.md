@@ -115,6 +115,25 @@ See [Multi-model registration](SOURCE_REGISTRATION.md) for rules and tests.
 
 ## Gallery Management
 
+### Portable Foreground Sources
+
+Stage D adds `SourceTransfer` in `source_transfer.py` and a modal background
+dialog in `ui/source_transfer.py`. Selected committed records become a versioned
+`.mphsources` ZIP containing a whitelisted JSON manifest and numeric NPY arrays.
+No encoder or model loader runs during transfer. Source UUIDs, owner transfer
+UIDs, session IDs, pass IDs, and temporal boundaries survive relocation.
+
+Preview verifies the archive and prepares explicit person mappings. Import
+revalidates archive/database snapshots, stages verified files, backs up SQLite,
+and commits source rows and identity aliases in one transaction. The existing
+library writer lease prevents concurrent capture, deletion, cleanup, and
+re-encoding; application controls are blocked while the transfer dialog is open.
+Source transfer shares person aliases and deletion/restoration history with
+Stage A, without transferring embeddings or altering inference contracts.
+See [Source transfer](SOURCE_TRANSFER.md) for limits and crash recovery.
+
+### Gallery Edits
+
 Gallery Manager filters records by the current model bundle, frame length, and
 point-cloud processing version. Passes can be disabled and restored; the Offline
 source/person controls perform soft deactivation. A separate lifecycle service

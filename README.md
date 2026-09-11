@@ -316,6 +316,24 @@ skipped. Cancellation or failure adds no partial multi-model galleries.
 See the [Stage C guide](docs/SOURCE_REGISTRATION.md)
 ([繁體中文](docs/SOURCE_REGISTRATION_zh.md)) for window rules, safeguards, and testing.
 
+## Transfer Enrollment Sources Between Computers
+
+In **Enrollment sources**, select one or more recordings and choose **Export
+selected sources** to create a `.mphsources` archive. On the receiving computer,
+choose **Import sources**, review verified recordings and identity mappings,
+then confirm. Imported foreground XYZ can be played back immediately and used
+with **Register to models** after installing compatible target bundles.
+
+Source archives preserve point arrays, timestamps, pass boundaries, coordinate
+conventions, and portable identity links. They do not contain model weights,
+Gallery embeddings, RGB/depth images, or full-scene sensor data. Use the existing
+`.mphgallery` transfer separately to move already encoded features. Both formats
+contain personal biometric data and are **not encrypted**; do not publish them.
+
+See [Source transfer](docs/SOURCE_TRANSFER.md)
+([繁體中文](docs/SOURCE_TRANSFER_zh.md)) for conflict resolution, recovery, and
+two-computer acceptance tests. Existing sources need not be captured again.
+
 ## Identification Workflow
 
 Each complete probe window is embedded and compared with all compatible

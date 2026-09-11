@@ -62,7 +62,9 @@ rows are deduplicated. An updated checkpoint or encoder needs re-enrollment;
 Stage A cannot reconstruct point clouds from embeddings.
 Opt-in [Stage B foreground recordings](ENROLLMENT_SOURCES.md) are stored
 separately and are not included in Gallery transfer archives or SQLite-only
-backups. Cross-model re-encoding remains a separate future stage.
+backups. Use [Stage D source transfer](SOURCE_TRANSFER.md) for foreground
+recordings and [Stage C registration](SOURCE_REGISTRATION.md) for cross-model
+re-encoding. Source archives and Gallery archives can be imported in either order.
 
 ## Integrity and Recovery
 

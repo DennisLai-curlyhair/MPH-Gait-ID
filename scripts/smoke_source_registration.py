@@ -21,12 +21,15 @@ from mph_gait_id.model_store import ModelStore
 from mph_gait_id.realtime.preprocessing import _deterministic_sample
 from mph_gait_id.runtime import SystemModelRuntime
 from mph_gait_id.source_registration import RegistrationTarget, SourceRegistrationService
+from mph_gait_id.source_transfer import SourceTransfer
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--bundle", action="append", dest="bundles")
+    parser.add_argument("--source-transfer", action="store_true",
+                        help="Export/import foreground sources before encoding and verify Gallery interoperability")
     args = parser.parse_args()
     bundle_ids = args.bundles or ["pointnet_tmax_final24_len15_seed2", "mph_gait_final24_len15_seed2",
                                  "lidargaitpp_final24_len15_seed2"]
@@ -54,6 +57,18 @@ def main():
         finally:
             if not capture.closed:
                 capture.abandon()
+        source_archive = Path(raw) / "synthetic.mphsources"
+        if args.source_transfer:
+            SourceTransfer(library, min_free_bytes=0).export(source_archive, [source_id])
+            original_library = library
+            repo = GalleryRepository(Path(raw) / "source-receiver" / "gallery.sqlite3")
+            library = EnrollmentSourceLibrary(repo)
+            receiver = SourceTransfer(library, min_free_bytes=0)
+            preview = receiver.preview(source_archive)
+            received = receiver.import_archive(source_archive, preview, {p["uid"]: p["target_id"] for p in preview["persons"]})
+            assert received["inserted"] == 1, received
+            for old, new in zip(original_library.manifest(source_id)["frames"], library.manifest(source_id)["frames"]):
+                np.testing.assert_array_equal(original_library.load_frame(source_id, old), library.load_frame(source_id, new))
         targets = [RegistrationTarget(key, 15) for key in bundle_ids]
         service = SourceRegistrationService(library, store, profile)
         report = service.run(source_id, targets, ["pass_001"], max_windows_per_pass=1,
@@ -84,7 +99,15 @@ def main():
         imported = receiver.import_archive(archive, preview, {p["uid"]: p["target_id"] for p in preview["persons"]})
         assert imported["inserted"] == len(targets), imported
         assert service.run(source_id, targets, ["pass_001"], device=args.device)["embeddings_added"] == 0
-        print(json.dumps(dict(status="passed", models=results, transferred=imported["inserted"]), indent=2))
+        if args.source_transfer:
+            other_library = EnrollmentSourceLibrary(other)
+            source_receiver = SourceTransfer(other_library, min_free_bytes=0)
+            preview = source_receiver.preview(source_archive)
+            source_receiver.import_archive(source_archive, preview, {p["uid"]: p["target_id"] for p in preview["persons"]})
+            other_service = SourceRegistrationService(other_library, store, profile)
+            assert other_service.run(source_id, targets, ["pass_001"], device=args.device)["embeddings_added"] == 0
+        print(json.dumps(dict(status="passed", models=results, transferred=imported["inserted"],
+                             source_transfer=args.source_transfer), indent=2))
 
 
 if __name__ == "__main__":

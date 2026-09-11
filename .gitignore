@@ -24,7 +24,9 @@ outputs/*
 *.sqlite
 *.sqlite3
 *.mphgallery
+*.[mM][pP][hH][sS][oO][uU][rR][cC][eE][sS]
 gallery_transfer/
+source_transfer_backups/
 *.db
 *.log
 

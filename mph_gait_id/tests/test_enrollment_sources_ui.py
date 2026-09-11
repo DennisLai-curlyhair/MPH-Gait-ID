@@ -127,6 +127,9 @@ class SourcePlaybackTimerTest(unittest.TestCase):
 
     def test_model_registration_action_still_opens_dialog(self):
         self.page.registration_dialog = None
+        self.page.transfer_dialog = None
+        self.page.tree = Mock()
+        self.page.tree.selection.return_value = ("source-test",)
         self.page.can_edit = lambda: (True, "")
         self.page.worker = Mock(busy=False)
         self.page.source_id = "source-test"
