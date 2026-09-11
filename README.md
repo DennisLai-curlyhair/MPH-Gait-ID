@@ -8,6 +8,13 @@ The repository is distributed with an empty gallery database. Enrollment data,
 captured frames, similarity logs, and performance reports are created locally
 and are excluded from version control.
 
+## Video Demonstration
+
+[Watch the single-take MPH-Gait ID demonstration on YouTube](https://youtu.be/QqzdWy1md6c).
+
+This continuous recording presents the application workflow for review. It is
+an operational demonstration, not a controlled accuracy or runtime benchmark.
+
 ## Research Reproducibility Notice
 
 This repository is published to support academic evaluation and reproduction
