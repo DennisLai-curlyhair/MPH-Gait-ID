@@ -63,6 +63,12 @@ class ScrollableFrame(ttk.Frame):
     def _match_content_width(self, event: tk.Event[tk.Misc]) -> None:
         self._fit_content()
 
+    def reveal(self, widget):
+        self.update_idletasks()
+        height = max(1, self.content.winfo_height())
+        offset = widget.winfo_rooty() - self.content.winfo_rooty()
+        self.canvas.yview_moveto(max(0, offset - 8) / height)
+
     def _fit_content(self) -> None:
         available = max(1, self.canvas.winfo_width())
         requested = self.content.winfo_reqwidth()

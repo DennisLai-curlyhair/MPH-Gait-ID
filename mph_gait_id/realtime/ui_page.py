@@ -9,16 +9,17 @@ from typing import Any, Callable
 import cv2
 import numpy as np
 import tkinter as tk
-from PIL import Image, ImageDraw, ImageTk
+from PIL import Image, ImageOps, ImageTk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from ..config import nested
 from ..controller import GaitApplicationController
 from ..identity import suggest_registration_identity
 from ..i18n import I18n
-from ..ui.preview import render_image
+from ..ui.preview import PreviewViewOptions, render_image
 from ..ui.scrollable import ScrollableFrame
 from ..ui.layout import SplitPane, WrappedLabel
+from ..ui.usability import CollapsibleSection, change_preview_view, icon_button, preview_toolbar
 from ..ui.workflow import ControlLock, form_controls, snapshot_feedback
 from ..ui.workers import BackgroundWorker
 from .detection import (
@@ -66,6 +67,8 @@ class RealtimePage(ttk.Frame):
         self._pass_requested_at = 0.0
         self._pass_result = {}
         self._readiness_after = None
+        self._preview_after = None
+        self.bind("<Destroy>", self._cancel_preview_redraw, add="+")
         self._gallery_counts = {}
         self.save_foreground_var = tk.BooleanVar(value=False)
         self.device_status = None
@@ -140,6 +143,7 @@ class RealtimePage(ttk.Frame):
         self.replay_fps_var = tk.DoubleVar(value=10.0)
         self.detector_confidence_var = tk.DoubleVar(value=0.35)
         self.loop_var = tk.BooleanVar(value=True)
+        self.cloud_view_options = PreviewViewOptions()
         self.allow_multi_enrollment_var = tk.BooleanVar(
             value=bool(
                 nested(
@@ -326,7 +330,8 @@ class RealtimePage(ttk.Frame):
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-        panes = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
+        panes = SplitPane(self, orient=tk.HORIZONTAL, fraction=0.32, minimum=(290, 400))
+        panes.view_id = "realtime.main"
         panes.grid(row=0, column=0, sticky="nsew")
         sidebar = ScrollableFrame(
             panes,
@@ -335,6 +340,7 @@ class RealtimePage(ttk.Frame):
             frame_style="Panel.TFrame",
         )
         content = ttk.Frame(panes, style="Panel.TFrame", padding=12)
+        self.sidebar_scroll = sidebar
         panes.add(sidebar, weight=0)
         panes.add(content, weight=1)
         self._build_sidebar(sidebar.content)
@@ -342,7 +348,8 @@ class RealtimePage(ttk.Frame):
         self._config_lock = ControlLock(form_controls(sidebar.content, exclude=(
             self.start_button, self.stop_button, self.start_pass_button,
             self.end_pass_button, self.discard_pass_button, self.finish_review_button,
-            self.pass_direction_combo)))
+            self.pass_direction_combo, self.advanced.toggle, self.detector_advanced.toggle,
+            *self.settings_links.values())))
 
     def _build_sidebar(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
@@ -629,8 +636,12 @@ class RealtimePage(ttk.Frame):
             "<<ComboboxSelected>>",
             lambda _event: self._detector_changed(),
         )
-        yolo_row = ttk.Frame(source, style="Panel.TFrame")
-        yolo_row.grid(row=6, column=0, sticky="ew")
+        self.detector_advanced = CollapsibleSection(source, "ui.advanced_detector", view_id="realtime.detector")
+        self.detector_advanced.grid(row=6, column=0, sticky="ew")
+        detector_settings = self.detector_advanced.content
+        detector_settings.columnconfigure(0, weight=1)
+        yolo_row = ttk.Frame(detector_settings, style="Panel.TFrame")
+        yolo_row.grid(row=0, column=0, sticky="ew")
         yolo_row.columnconfigure(0, weight=1)
         self.yolo_entry = ttk.Entry(yolo_row, textvariable=self.yolo_weights_var)
         self.yolo_entry.grid(row=0, column=0, sticky="ew")
@@ -641,8 +652,8 @@ class RealtimePage(ttk.Frame):
         )
         self.yolo_button.grid(row=0, column=1, padx=(7, 0))
 
-        sam_row = ttk.Frame(source, style="Panel.TFrame")
-        sam_row.grid(row=7, column=0, sticky="ew", pady=(7, 0))
+        sam_row = ttk.Frame(detector_settings, style="Panel.TFrame")
+        sam_row.grid(row=1, column=0, sticky="ew", pady=(7, 0))
         sam_row.columnconfigure(0, weight=1)
         self.sam_entry = ttk.Entry(
             sam_row,
@@ -655,8 +666,8 @@ class RealtimePage(ttk.Frame):
             command=self._browse_sam,
         )
         self.sam_button.grid(row=0, column=1, padx=(7, 0))
-        sam_refresh_row = ttk.Frame(source, style="Panel.TFrame")
-        sam_refresh_row.grid(row=8, column=0, sticky="ew", pady=(7, 0))
+        sam_refresh_row = ttk.Frame(detector_settings, style="Panel.TFrame")
+        sam_refresh_row.grid(row=2, column=0, sticky="ew", pady=(7, 0))
         sam_refresh_row.columnconfigure(0, weight=1)
         self.sam_refresh_label = ttk.Label(
             sam_refresh_row,
@@ -760,6 +771,10 @@ class RealtimePage(ttk.Frame):
                     "<<ComboboxSelected>>",
                     lambda _event: self._clip_len_changed(),
                 )
+        self.advanced = CollapsibleSection(settings, "ui.advanced_inference", view_id="realtime.advanced")
+        self.advanced.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        settings = self.advanced.content
+        settings.columnconfigure(1, weight=1)
         ttk.Label(settings, text="Unknown threshold", style="Panel.TLabel").grid(
             row=3, column=0, sticky="w", pady=(7, 0)
         )
@@ -849,6 +864,7 @@ class RealtimePage(ttk.Frame):
         readiness.grid(row=6, column=0, sticky="ew", pady=(10, 0))
         readiness.columnconfigure(1, weight=1)
         self.readiness_vars = {}
+        self.settings_links = {}
         for row, key in enumerate(("source", "model", "detector", "gallery", "identity", "settings")):
             variable = tk.StringVar()
             self.readiness_vars[key] = variable
@@ -856,6 +872,15 @@ class RealtimePage(ttk.Frame):
                 row=row, column=0, sticky="nw", padx=(0, 8), pady=3)
             WrappedLabel(readiness, textvariable=variable, style="Panel.TLabel").grid(
                 row=row, column=1, sticky="ew", pady=3)
+            if key in ("settings", "detector"):
+                button = ttk.Button(readiness, text="ui.show_settings", command=lambda k=key: self._reveal_settings(k))
+                button.grid(row=row, column=2, sticky="e", padx=(4, 0))
+                self.settings_links[key] = button
+
+    def _reveal_settings(self, key):
+        section = self.detector_advanced if key == "detector" else self.advanced
+        section.set_expanded(True)
+        self.after_idle(lambda: self.sidebar_scroll.reveal(section))
 
     def _build_content(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
@@ -918,6 +943,7 @@ class RealtimePage(ttk.Frame):
             )
 
         paned = SplitPane(parent, orient=tk.VERTICAL, fraction=0.76, minimum=(220, 80))
+        paned.view_id = "realtime.results"
         paned.grid(row=2, column=0, sticky="nsew")
         previews = ttk.Frame(paned, style="Panel.TFrame")
         details = ttk.Frame(paned, style="Panel.TFrame")
@@ -959,12 +985,8 @@ class RealtimePage(ttk.Frame):
             style="Muted.Panel.TLabel",
         )
         self.cloud_scale_label.grid(row=0, column=0, sticky="ew")
-        ttk.Button(
-            cloud_controls,
-            text="−",
-            width=3,
-            command=lambda: self._adjust_cloud_zoom(1.0 / 1.2),
-        ).grid(row=0, column=1, padx=(5, 0))
+        icon_button(cloud_controls, "zoom_out", lambda: self._adjust_cloud_zoom(1 / 1.2), self.i18n).grid(
+            row=0, column=1, padx=(5, 0))
         ttk.Label(
             cloud_controls,
             textvariable=self.cloud_zoom_text_var,
@@ -972,18 +994,10 @@ class RealtimePage(ttk.Frame):
             width=7,
             anchor="center",
         ).grid(row=0, column=2, padx=4)
-        ttk.Button(
-            cloud_controls,
-            text="+",
-            width=3,
-            command=lambda: self._adjust_cloud_zoom(1.2),
-        ).grid(row=0, column=3)
-        ttk.Button(
-            cloud_controls,
-            text="Reset",
-            width=6,
-            command=self._reset_cloud_zoom,
-        ).grid(row=0, column=4, padx=(5, 0))
+        icon_button(cloud_controls, "zoom_in", lambda: self._adjust_cloud_zoom(1.2), self.i18n).grid(row=0, column=3)
+        preview_tools = CollapsibleSection(cloud_controls, "預覽視角", view_id="realtime.preview")
+        preview_tools.grid(row=1, column=0, columnspan=4, sticky="ew")
+        preview_toolbar(preview_tools.content, self._cloud_view_action, self.i18n).grid(row=0, column=0, sticky="w")
 
         self.rgb_label = ttk.Label(
             rgb_group,
@@ -999,6 +1013,8 @@ class RealtimePage(ttk.Frame):
         )
         self.rgb_label.grid(row=1, column=0, sticky="nsew")
         self.cloud_label.grid(row=1, column=0, sticky="nsew")
+        self.rgb_label.bind("<Configure>", self._preview_resized, add="+")
+        self.cloud_label.bind("<Configure>", self._preview_resized, add="+")
 
         details.columnconfigure(0, weight=1)
         details.rowconfigure(0, weight=1)
@@ -2231,13 +2247,38 @@ class RealtimePage(ttk.Frame):
         self._refresh_last_preview()
 
     def _reset_cloud_zoom(self) -> None:
+        self.cloud_view_options = PreviewViewOptions()
         self.cloud_zoom_var.set(1.0)
         self._update_cloud_zoom_text()
         self._refresh_last_preview()
 
+    def _cloud_view_action(self, action):
+        self.cloud_view_options = change_preview_view(self.cloud_view_options, action)
+        if action == "reset":
+            self._reset_cloud_zoom()
+        else:
+            self._refresh_last_preview()
+
     def _refresh_last_preview(self) -> None:
         if self._last_snapshot is not None:
             self._show_images(self._last_snapshot)
+
+    def _cancel_preview_redraw(self, event):
+        if event.widget == self and self._preview_after is not None:
+            self.after_cancel(self._preview_after)
+            self._preview_after = None
+
+    def _preview_resized(self, _event=None):
+        if self._last_snapshot is None:
+            return
+        if self._preview_after is not None:
+            self.after_cancel(self._preview_after)
+        self._preview_after = self.after(100, self._redraw_preview)
+
+    def _redraw_preview(self):
+        self._preview_after = None
+        if self.winfo_ismapped():
+            self._refresh_last_preview()
 
     def _show_images(self, snapshot: PipelineSnapshot) -> None:
         self._last_snapshot = snapshot
@@ -2278,13 +2319,16 @@ class RealtimePage(ttk.Frame):
                 image,
                 (max(320, self.rgb_label.winfo_width()), max(240, self.rgb_label.winfo_height())),
             )
+            fitted = ImageOps.contain(fitted, (max(1, self.rgb_label.winfo_width() - 16),
+                                             max(1, self.rgb_label.winfo_height() - 16)))
             self._rgb_photo = ImageTk.PhotoImage(fitted)
             self.rgb_label.configure(image=self._rgb_photo, text="")
         if snapshot.person_points_mm is not None:
             image = self._render_points(
                 snapshot.person_points_mm,
-                (max(260, self.cloud_label.winfo_width()), max(180, self.cloud_label.winfo_height())),
+                (max(1, self.cloud_label.winfo_width() - 16), max(1, self.cloud_label.winfo_height() - 16)),
                 zoom=float(self.cloud_zoom_var.get()),
+                view_options=self.cloud_view_options,
             )
             self._cloud_photo = ImageTk.PhotoImage(image)
             self.cloud_label.configure(image=self._cloud_photo, text="")
@@ -2294,6 +2338,7 @@ class RealtimePage(ttk.Frame):
         points: np.ndarray,
         size: tuple[int, int],
         zoom: float = 1.0,
+        view_options: PreviewViewOptions | None = None,
     ) -> Image.Image:
         width, height = size
         canvas = np.full((height, width, 3), (24, 27, 31), dtype=np.uint8)
@@ -2306,6 +2351,18 @@ class RealtimePage(ttk.Frame):
             return Image.fromarray(canvas)
         x = values[:, 0] - np.median(values[:, 0])
         y = values[:, 1] - np.median(values[:, 1])
+        view = view_options or PreviewViewOptions()
+        if view.flip_horizontal:
+            x = -x
+        if view.flip_vertical:
+            y = -y
+        rotation = view.rotation % 360
+        if rotation == 90:
+            x, y = -y, x
+        elif rotation == 180:
+            x, y = -x, -y
+        elif rotation == 270:
+            x, y = y, -x
         # Keep a fixed physical 2.4 m square instead of fitting the current
         # percentiles. Point count and partial masks can no longer make the
         # person jump in size; the user-controlled zoom is the only scale change.
@@ -2315,10 +2372,12 @@ class RealtimePage(ttk.Frame):
             (height * 0.84) / physical_span_mm,
         )
         scale *= max(0.25, min(4.0, float(zoom)))
-        px = np.rint(width * 0.5 + x * scale).astype(np.int32)
-        py = np.rint(height * 0.5 + y * scale).astype(np.int32)
+        px = np.rint(width * 0.5 + x * scale + view.pan_x).astype(np.int32)
+        py = np.rint(height * 0.5 + y * scale + view.pan_y).astype(np.int32)
         visible = (px >= 0) & (px < width) & (py >= 0) & (py < height)
         px, py = px[visible], py[visible]
+        if not len(px):
+            return Image.fromarray(canvas)
         depth = values[visible, 2]
         low, high = np.percentile(depth, [2, 98])
         ratio = np.clip((depth - low) / max(float(high - low), 1.0), 0.0, 1.0)
@@ -2327,11 +2386,4 @@ class RealtimePage(ttk.Frame):
             axis=1,
         ).astype(np.uint8)
         canvas[py, px] = colors
-        image = Image.fromarray(canvas)
-        draw = ImageDraw.Draw(image)
-        draw.text(
-            (10, height - 20),
-            f"{len(values):,} displayed points | fixed 2.4 m | {float(zoom):.2f}x",
-            fill=(210, 218, 225),
-        )
-        return image
+        return Image.fromarray(canvas)

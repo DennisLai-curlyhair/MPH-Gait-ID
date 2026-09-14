@@ -18,6 +18,8 @@ from .enrollment_sources import EnrollmentSourcesPage
 from .performance_benchmark import PerformanceBenchmarkPage
 from .scrollable import ScrollableFrame
 from .layout import ScrollPosition, SplitPane, WrappedLabel, preserve_layout
+from .preferences import LayoutPreferences
+from .usability import CollapsibleSection, icon_button
 from .workers import BackgroundWorker, WorkerMessage
 
 
@@ -56,6 +58,8 @@ class GaitIdentityWindow:
             controller.config.get("ui", {}).get("language", "auto")
         )
         self.i18n = I18n(configured_language)
+        self.layout_preferences = LayoutPreferences(root, self.i18n.settings_path,
+            str(controller.config.get("ui", {}).get("geometry", "1380x860")))
         setattr(self.root, "_gait_i18n", self.i18n)
         self.language_var = tk.StringVar(value=self.i18n.language_choice())
         self.worker = BackgroundWorker()
@@ -113,17 +117,24 @@ class GaitIdentityWindow:
         self.i18n.apply(self.root)
         self._on_bundle_changed()
         self._refresh_database()
+        self.layout_preferences.attach()
         self.root.after(100, self._poll_worker)
 
     def _configure_window(self) -> None:
-        geometry = str(self.controller.config.get("ui", {}).get("geometry", "1380x860"))
         self.root.title(self.i18n.tr("app.title"))
-        self.root.geometry(geometry)
-        self.root.minsize(980, 640)
+        self.layout_preferences.configure_window()
         self.root.configure(background=COLORS["app_bg"])
         self.root.protocol("WM_DELETE_WINDOW", self._close)
 
     def _configure_styles(self) -> None:
+        from tkinter import font as tkfont
+        families = set(tkfont.families(self.root))
+        default_font = tkfont.nametofont("TkDefaultFont")
+        family = next((name for name in ("Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC",
+                                        "Noto Sans CJK TC", "Noto Sans TC") if name in families),
+                      default_font.actual("family"))
+        for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont", "TkTooltipFont"):
+            tkfont.nametofont(name).configure(family=family)
         style = ttk.Style(self.root)
         style.theme_use("clam")
         style.configure("TFrame", background=COLORS["app_bg"])
@@ -137,13 +148,13 @@ class GaitIdentityWindow:
             "Header.TLabel",
             background=COLORS["app_bg"],
             foreground=COLORS["text"],
-            font=("TkDefaultFont", 17, "bold"),
+            font=(family, 17, "bold"),
         )
         style.configure(
             "Result.TLabel",
             background=COLORS["panel"],
             foreground=COLORS["text"],
-            font=("TkDefaultFont", 16, "bold"),
+            font=(family, 16, "bold"),
         )
         for name, color in (
             ("Stable", COLORS["stable"]),
@@ -155,7 +166,7 @@ class GaitIdentityWindow:
                 f"{name}.TLabel",
                 background=COLORS["panel"],
                 foreground=color,
-                font=("TkDefaultFont", 10, "bold"),
+                font=(family, 10, "bold"),
             )
         style.configure(
             "TLabelframe",
@@ -168,7 +179,7 @@ class GaitIdentityWindow:
             "TLabelframe.Label",
             background=COLORS["panel"],
             foreground=COLORS["text"],
-            font=("TkDefaultFont", 10, "bold"),
+            font=(family, 10, "bold"),
         )
         style.configure(
             "TButton",
@@ -178,20 +189,24 @@ class GaitIdentityWindow:
             bordercolor=COLORS["border"],
         )
         style.map("TButton", background=[("active", "#dce3e8")])
+        style.configure("Tool.TButton", padding=(5, 5))
+        style.configure("Danger.TButton", foreground="#a12828")
+        style.map("Danger.TButton", foreground=[("disabled", "#888888"), ("active", "#891c1c")])
         style.configure(
             "Accent.TButton",
             background=COLORS["accent"],
             foreground="#ffffff",
             bordercolor=COLORS["accent"],
-            font=("TkDefaultFont", 10, "bold"),
+            font=(family, 10, "bold"),
             padding=(12, 9),
         )
         style.map(
             "Accent.TButton",
             background=[("active", COLORS["accent_active"]), ("disabled", "#9eb6b5")],
         )
-        style.configure("Treeview", rowheight=27, background="#ffffff", fieldbackground="#ffffff")
-        style.configure("Treeview.Heading", font=("TkDefaultFont", 9, "bold"))
+        rowheight = max(27, tkfont.nametofont("TkDefaultFont").metrics("linespace") + 10)
+        style.configure("Treeview", rowheight=rowheight, background="#ffffff", fieldbackground="#ffffff")
+        style.configure("Treeview.Heading", font=(family, 9, "bold"))
         style.configure("TNotebook", background=COLORS["panel"], borderwidth=0)
         style.configure("TNotebook.Tab", padding=(12, 7))
         style.configure("Horizontal.TProgressbar", background=COLORS["accent"])
@@ -221,6 +236,9 @@ class GaitIdentityWindow:
             "<<ComboboxSelected>>",
             lambda _event: self._on_language_changed(),
         )
+        reset = icon_button(app_bar, "reset", self._reset_layout, self.i18n)
+        reset._tooltip.text = lambda: self.i18n.tr("ui.reset_layout")
+        reset.grid(row=0, column=3, padx=(8, 0))
 
         self.mode_notebook = ttk.Notebook(self.root)
         self.mode_notebook.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
@@ -268,6 +286,11 @@ class GaitIdentityWindow:
         self.sources_page = EnrollmentSourcesPage(
             self.mode_notebook, self.controller, can_edit=self._source_edit_available,
             on_gallery_changed=self._gallery_changed, prepare_encoding=self._prepare_source_encoding)
+        for key, tree in (("offline.people", self.person_tree), ("offline.candidates", self.candidate_tree),
+                          ("offline.windows", self.window_tree), ("offline.history", self.history_tree),
+                          ("realtime.candidates", self.realtime_page.candidates),
+                          ("performance.history", self.performance_page.tree)):
+            tree.view_id = key
         self.mode_notebook.add(self.sources_page, text="nav.sources")
         self.mode_notebook.bind(
             "<<NotebookTabChanged>>",
@@ -290,6 +313,12 @@ class GaitIdentityWindow:
         if hasattr(self, "sources_page"):
             self.sources_page.set_locale(locale_name)
         self.i18n.apply(self.root)
+        if hasattr(self, "preview"):
+            self.preview._update_view_state_label()
+        for page, name in ((getattr(self, "gallery_page", None), "person_browser"),
+                           (getattr(self, "sources_page", None), "browser")):
+            if page is not None:
+                getattr(page, name).update_count()
         self.root.after_idle(restore_layout)
         if hasattr(self, "bundles"):
             self._update_model_description()
@@ -400,7 +429,8 @@ class GaitIdentityWindow:
             row=0, column=1, sticky="e"
         )
 
-        paned = ttk.Panedwindow(parent, orient=tk.HORIZONTAL)
+        paned = SplitPane(parent, orient=tk.HORIZONTAL, fraction=0.32, minimum=(290, 400))
+        paned.view_id = "offline.main"
         paned.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 10))
         self.sidebar_scroll = ScrollableFrame(
             paned,
@@ -546,8 +576,9 @@ class GaitIdentityWindow:
             wraplength=340,
         ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
-        threshold_group = ttk.LabelFrame(parent, text="Open-set 設定", padding=12)
-        threshold_group.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        section = CollapsibleSection(parent, "ui.advanced_open_set", view_id="offline.advanced")
+        section.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        threshold_group = section.content
         threshold_group.columnconfigure(0, weight=1)
         ttk.Label(threshold_group, text="Unknown threshold", style="Panel.TLabel").grid(row=0, column=0, sticky="w")
         self.threshold_spin = ttk.Spinbox(
@@ -712,6 +743,7 @@ class GaitIdentityWindow:
         )
 
         self.content_paned = SplitPane(parent, orient=tk.VERTICAL, fraction=0.65, minimum=(200, 120))
+        self.content_paned.view_id = "offline.results"
         self.content_paned.grid(row=1, column=0, sticky="nsew")
         preview_host = ttk.Frame(self.content_paned, style="Panel.TFrame")
         details_host = ttk.Frame(self.content_paned, style="Panel.TFrame")
@@ -1665,6 +1697,15 @@ class GaitIdentityWindow:
         if children:
             tree.delete(*children)
 
+    def _reset_layout(self) -> None:
+        if not messagebox.askyesno(self.i18n.tr("ui.reset_layout"),
+                                   self.i18n.tr("ui.reset_confirm"), parent=self.root):
+            return
+        try:
+            self.layout_preferences.reset()
+        except OSError as exc:
+            messagebox.showwarning(self.i18n.tr("ui.preferences"), str(exc), parent=self.root)
+
     def _close(self) -> None:
         if (getattr(getattr(self, "realtime_page", None), "commit_pending", False)
                 or getattr(getattr(self, "realtime_page", None), "_device_check_pending", False)
@@ -1682,5 +1723,9 @@ class GaitIdentityWindow:
             self.realtime_page.close()
         if hasattr(self, "performance_page"):
             self.performance_page.close()
+        try:
+            self.layout_preferences.save()
+        except OSError as exc:
+            messagebox.showwarning(self.i18n.tr("ui.preferences"), str(exc), parent=self.root)
         self.preview.stop()
         self.root.destroy()

@@ -52,6 +52,8 @@ and upstream sources.
   ([繁體中文](docs/UI_LAYOUT_PHASE1_zh.md)) with bilingual layout checks.
 - [Readiness checks and workflow feedback](docs/UI_WORKFLOW_PHASE2.md)
   ([繁體中文](docs/UI_WORKFLOW_PHASE2_zh.md)) for guided enrollment and batch jobs.
+- [Layout preferences, searchable lists and preview tools](docs/UI_USABILITY_PHASE3.md)
+  ([繁體中文](docs/UI_USABILITY_PHASE3_zh.md)) with local acceptance checks.
 - Replay and pipeline validation tools for development without Kinect hardware.
 
 The current real-time workflow selects one primary person. It is not a
