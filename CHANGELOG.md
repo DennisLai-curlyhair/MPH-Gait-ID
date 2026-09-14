@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
 ### UI
 - Persist presentation-only window/pane/column preferences and add a confirmed
@@ -48,11 +48,26 @@
   option using synthetic recordings.
 
 ### Compatibility
-- Existing recordings and embeddings are retained; no model weights, inference
-  contract hashes, dependencies, or release version are changed.
+- Existing recordings and embeddings are retained; model weights, inference
+  contract hashes, and dependencies are unchanged from v0.4.0.
 - Transfer archives are not encrypted and contain personal biometric data.
   `.mphsources` and source-transfer backups are excluded from Git.
 - See [Source transfer](docs/SOURCE_TRANSFER.md) for local acceptance checks.
+
+### Upgrade
+- Close all app instances and back up the complete `data/` directory, including
+  the Gallery database and its enrollment-source directory, before upgrading.
+- Existing v0.4.0 Gallery entries and sources need no re-encoding for this release.
+  Upgrades from v0.3.0 or earlier still require the compatibility checks documented
+  in [Inference hardening](docs/INFERENCE_HARDENING.md).
+- Reinstall the editable package with `python -m pip install --no-deps -e .`
+  in the existing v0.4.0 environment to refresh package metadata.
+
+### Validation
+- 251 application tests passed, including Tk UI tests under a virtual display.
+- Three script tests and the release asset validation passed.
+- Local usability testing was completed successfully before release preparation.
+  Server-side tests did not include physical Azure Kinect hardware.
 
 ## 0.4.0
 

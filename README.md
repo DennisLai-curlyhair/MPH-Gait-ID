@@ -234,6 +234,32 @@ Expect `2.10.0+cu126` and `12.6`. Generic `requirements.txt` and
 above to guarantee GPU wheels, or combine `-r requirements-cuda.txt` with
 the generic requirements in the same pip command on Linux.
 
+## Upgrading to v0.5.0
+
+Version 0.5.0 adds portable foreground-source archives and UI improvements for
+enrollment, identification, and Gallery management. Model weights, inference
+contracts, and dependencies are unchanged from v0.4.0.
+
+Close all app instances and back up the complete `data/` directory before
+upgrading, including the Gallery database and its enrollment-source directory.
+Update the checkout, then refresh package metadata in the existing v0.4.0
+environment:
+
+```bash
+python -m pip install --no-deps -e .
+python -m pip check
+python -c "import mph_gait_id; print(mph_gait_id.__version__)"
+```
+
+The version should report `0.5.0`. Existing v0.4.0 recordings and embeddings do
+not require re-encoding. When upgrading from v0.3.0 or earlier, also follow the
+v0.4.0 compatibility guidance below. Do not overwrite a destination database
+that contains new enrollments; use the transfer tools to merge records.
+
+See [source transfer](docs/SOURCE_TRANSFER.md),
+[UI usability](docs/UI_USABILITY_PHASE3.md), and [CHANGELOG.md](CHANGELOG.md).
+Transfer archives contain biometric data and are not encrypted.
+
 ## Upgrading to v0.4.0
 
 Version 0.4.0 introduces versioned Gallery contracts. Back up the complete
@@ -254,7 +280,7 @@ confirmation options, installation, compatibility limits, and tests.
 
 ## Upgrading to v0.3.0
 
-These instructions describe the earlier v0.3.0 upgrade. For v0.4.0,
+These instructions describe the earlier v0.3.0 upgrade. For v0.4.0 and later,
 also complete the contract migration above.
 
 The v0.3.0 release adds saved enrollment foreground sources and multi-model
