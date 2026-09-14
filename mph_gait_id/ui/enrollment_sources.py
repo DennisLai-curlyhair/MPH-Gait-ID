@@ -10,7 +10,9 @@ from PIL import ImageTk
 from ..enrollment_sources import EnrollmentSourceLibrary
 from ..i18n import I18n
 from .workers import BackgroundWorker
-from .layout import ScrollPosition, WrappedLabel, reserve_text_width
+from .layout import ScrollPosition, SplitPane, WrappedLabel, reserve_text_width
+from .usability import TableBrowser, icon_button
+from .preview import PreviewViewOptions
 
 
 class EnrollmentSourcesPage(ttk.Frame):
@@ -39,6 +41,7 @@ class EnrollmentSourcesPage(ttk.Frame):
         self.detail = tk.StringVar()
         self.pass_var = tk.StringVar()
         self.zoom = tk.DoubleVar(value=1.0)
+        self.view_options = PreviewViewOptions()
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         toolbar = ttk.Frame(self)
@@ -49,7 +52,8 @@ class EnrollmentSourcesPage(ttk.Frame):
             ("清理未提交暫存", "Clean uncommitted files", self._cleanup),
             ("多模型特徵註冊", "Register to models", self._open_model_registration),
         ]):
-            button = ttk.Button(toolbar, command=command)
+            button = ttk.Button(toolbar, command=command,
+                                style="Danger.TButton" if command == self._delete else "TButton")
             button.grid(row=0, column=i, padx=4)
             self._labels.append((button, zh, en))
         for col, (zh, en, operation) in enumerate([
@@ -60,24 +64,29 @@ class EnrollmentSourcesPage(ttk.Frame):
             button.grid(row=1, column=col * 2, columnspan=2, sticky="ew", padx=4, pady=(6, 0))
             self._labels.append((button, zh, en))
         WrappedLabel(self, textvariable=self.summary).grid(row=2, column=0, sticky="ew", pady=6)
-        panes = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
+        panes = SplitPane(self, orient=tk.HORIZONTAL, fraction=0.45, minimum=(280, 320))
+        panes.view_id = "sources.main"
         panes.grid(row=1, column=0, sticky="nsew")
         listing, preview = ttk.Frame(panes), ttk.Frame(panes)
         panes.add(listing, weight=2)
         panes.add(preview, weight=3)
         listing.columnconfigure(0, weight=1)
-        listing.rowconfigure(0, weight=1)
+        listing.rowconfigure(1, weight=1)
         self.tree = ttk.Treeview(listing, columns=("person", "name", "passes", "frames", "size", "date"),
                                  show="headings", selectmode="extended")
+        self.tree.view_id = "sources.list"
         for key, width in [("person", 100), ("name", 140), ("passes", 60), ("frames", 75),
                            ("size", 85), ("date", 170)]:
             self.tree.column(key, width=width, minwidth=width, stretch=False)
         vs = ttk.Scrollbar(listing, command=self.tree.yview)
         hs = ttk.Scrollbar(listing, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=vs.set, xscrollcommand=hs.set)
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        vs.grid(row=0, column=1, sticky="ns")
-        hs.grid(row=1, column=0, sticky="ew")
+        self.browser = TableBrowser(listing, self.tree, self.i18n,
+            search_columns=("person", "name"), numeric_columns=("passes", "frames", "size"))
+        self.browser.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.tree.grid(row=1, column=0, sticky="nsew")
+        vs.grid(row=1, column=1, sticky="ns")
+        hs.grid(row=2, column=0, sticky="ew")
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._select())
         preview.columnconfigure(0, weight=1)
         preview.rowconfigure(1, weight=1)
@@ -88,16 +97,18 @@ class EnrollmentSourcesPage(ttk.Frame):
         self.pass_combo = ttk.Combobox(controls, textvariable=self.pass_var, state="readonly", width=12)
         self.pass_combo.grid(row=0, column=0, columnspan=4, sticky="ew", padx=4)
         self.pass_combo.bind("<<ComboboxSelected>>", lambda _e: self._select_pass())
-        for col, (zh, en, command) in enumerate([
-            ("播放", "Play", self._play), ("暫停", "Pause", self.pause),
-            ("上一幀", "Previous", lambda: self._step(-1)),
-            ("下一幀", "Next", lambda: self._step(1)),
+        for col, (action, command) in enumerate([
+            ("play", self._play), ("pause", self.pause),
+            ("previous", lambda: self._step(-1)),
+            ("next", lambda: self._step(1)),
         ]):
-            button = ttk.Button(controls, command=command, width=9)
+            button = icon_button(controls, action, command, self.i18n)
             button.grid(row=1, column=col, sticky="ew", padx=2, pady=(4, 0))
-            self._labels.append((button, zh, en))
         ttk.Scale(controls, from_=0.25, to=3.0, variable=self.zoom,
                   command=lambda _v: self._show()).grid(row=2, column=0, columnspan=4, sticky="ew")
+        from .usability import preview_toolbar
+        preview_toolbar(controls, self._view_action, self.i18n).grid(
+            row=3, column=0, columnspan=4, sticky="w")
         self.canvas = tk.Canvas(preview, background="#181b1f", highlightthickness=0, width=320, height=250)
         self.canvas.grid(row=1, column=0, sticky="nsew", padx=8, pady=6)
         self.canvas.bind("<Configure>", lambda _e: self._show())
@@ -118,6 +129,7 @@ class EnrollmentSourcesPage(ttk.Frame):
                             ("passes", "片段", "Passes"), ("frames", "幀數", "Frames"),
                             ("size", "大小 MiB", "Size MiB"), ("date", "建立 UTC", "Created UTC")]:
             self.tree.heading(key, text=self._t(zh, en))
+        self.browser.update_count()
         self._show_usage()
 
     def _show_usage(self):
@@ -146,6 +158,8 @@ class EnrollmentSourcesPage(ttk.Frame):
         try:
             rows = self.library.list_sources()
             usage = self.library.usage()
+            if "browser" in self.__dict__:
+                self.browser.before_refresh()
             self.tree.delete(*self.tree.get_children())
             for row in rows:
                 linked = row["current_person_id"] is not None
@@ -157,6 +171,9 @@ class EnrollmentSourcesPage(ttk.Frame):
             self.tree.selection_set(remaining)
             if focused and self.tree.exists(focused):
                 self.tree.focus(focused)
+            if "browser" in self.__dict__:
+                self.browser.after_refresh()
+                remaining = self.tree.selection()
             if self.source_id not in remaining:
                 self._clear_preview()
             self._select()
@@ -201,7 +218,8 @@ class EnrollmentSourcesPage(ttk.Frame):
             frame = self.frames[self.index]
             points = self.library.load_frame(self.source_id, frame)
             size = (max(100, self.canvas.winfo_width()), max(100, self.canvas.winfo_height()))
-            image = RealtimePage._render_points(points, size, zoom=self.zoom.get())
+            image = RealtimePage._render_points(points, size, zoom=self.zoom.get(),
+                                                view_options=self.view_options)
             self.photo = ImageTk.PhotoImage(image)
             self.canvas.delete("all")
             self.canvas.create_image(size[0] / 2, size[1] / 2, image=self.photo)
@@ -216,6 +234,13 @@ class EnrollmentSourcesPage(ttk.Frame):
         if self.timer is not None:
             self.after_cancel(self.timer)
             self.timer = None
+
+    def _view_action(self, action):
+        from .usability import change_preview_view
+        self.view_options = change_preview_view(self.view_options, action)
+        if action == "reset":
+            self.zoom.set(1.0)
+        self._show()
 
     def _step(self, delta):
         self.pause()

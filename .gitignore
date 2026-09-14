@@ -120,6 +120,9 @@ dataset_proj/
 
 # Local tool state and test outputs
 .cache/
+settings_layout.json
+ui_layout.json
+.ui-layout-*.tmp
 .ipynb_checkpoints/
 .tox/
 .nox/

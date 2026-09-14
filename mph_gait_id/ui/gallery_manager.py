@@ -8,7 +8,8 @@ from tkinter import messagebox, simpledialog, ttk
 from ..controller import GaitApplicationController
 from ..i18n import I18n
 from .gallery_transfer import GalleryTransferDialog
-from .layout import ScrollPosition, WrappedLabel
+from .layout import ScrollPosition, SplitPane, WrappedLabel
+from .usability import TableBrowser
 
 
 class GalleryManagerPage(ttk.Frame):
@@ -53,17 +54,13 @@ class GalleryManagerPage(ttk.Frame):
         header.columnconfigure(0, weight=1)
         self.export_button = ttk.Button(header, text="Export all Gallery",
                                         command=lambda: self._transfer("export"))
-        self.export_button.grid(row=2, column=0, sticky="w", pady=(8, 0))
+        self.export_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
         self.import_button = ttk.Button(header, text="Import Gallery",
                                         command=lambda: self._transfer("import"))
-        self.import_button.grid(row=2, column=1, sticky="e", pady=(8, 0))
+        self.import_button.grid(row=0, column=2, sticky="e", padx=(8, 0))
         ttk.Label(header, text="Gallery Manager", style="Header.TLabel").grid(
             row=0, column=0, sticky="w"
         )
-        WrappedLabel(
-            header,
-            text="gallery.description",
-        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(3, 0))
 
         filters = ttk.LabelFrame(self, text="Gallery scope", padding=10)
         filters.grid(row=1, column=0, sticky="ew", pady=(12, 10))
@@ -104,7 +101,8 @@ class GalleryManagerPage(ttk.Frame):
             row=2, column=0, columnspan=5, sticky="ew", pady=(8, 0)
         )
 
-        paned = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
+        paned = SplitPane(self, orient=tk.HORIZONTAL, fraction=0.4, minimum=(260, 300))
+        paned.view_id = "gallery.main"
         paned.grid(row=2, column=0, sticky="nsew")
         persons_group = ttk.LabelFrame(paned, text="Registered identities", padding=8)
         passes_group = ttk.LabelFrame(paned, text="Registration sessions and passes", padding=8)
@@ -112,13 +110,14 @@ class GalleryManagerPage(ttk.Frame):
         paned.add(passes_group, weight=3)
 
         persons_group.columnconfigure(0, weight=1)
-        persons_group.rowconfigure(0, weight=1)
+        persons_group.rowconfigure(1, weight=1)
         self.person_tree = ttk.Treeview(
             persons_group,
             columns=("id", "name", "embeddings", "models", "note"),
             show="headings",
             selectmode="browse",
         )
+        self.person_tree.view_id = "gallery.people"
         for column, heading, width in (
             ("id", "Person ID", 105),
             ("name", "Display name", 150),
@@ -131,18 +130,22 @@ class GalleryManagerPage(ttk.Frame):
         person_scroll = ttk.Scrollbar(persons_group, command=self.person_tree.yview)
         person_hscroll = ttk.Scrollbar(persons_group, orient="horizontal", command=self.person_tree.xview)
         self.person_tree.configure(yscrollcommand=person_scroll.set, xscrollcommand=person_hscroll.set)
-        self.person_tree.grid(row=0, column=0, sticky="nsew")
-        person_scroll.grid(row=0, column=1, sticky="ns")
-        person_hscroll.grid(row=1, column=0, sticky="ew")
+        self.person_browser = TableBrowser(persons_group, self.person_tree, self.i18n,
+            search_columns=("id", "name"), numeric_columns=("embeddings", "models"))
+        self.person_browser.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.person_tree.grid(row=1, column=0, sticky="nsew")
+        person_scroll.grid(row=1, column=1, sticky="ns")
+        person_hscroll.grid(row=2, column=0, sticky="ew")
         self.person_tree.bind("<<TreeviewSelect>>", lambda _event: self._load_passes())
         ttk.Checkbutton(persons_group, text="gallery.all_people", variable=self.show_all_people,
-                        command=self.refresh).grid(row=2, column=0, columnspan=2, sticky="w")
+                        command=self.refresh).grid(row=3, column=0, columnspan=2, sticky="w")
         ttk.Button(persons_group, text="gallery.rename_person",
                    command=lambda: self._edit_person("rename")).grid(
-                       row=3, column=0, columnspan=2, sticky="ew", pady=4)
+                       row=4, column=0, columnspan=2, sticky="ew", pady=4)
         ttk.Button(persons_group, text="gallery.delete_person",
+                   style="Danger.TButton",
                    command=lambda: self._edit_person("delete_person")).grid(
-                       row=4, column=0, columnspan=2, sticky="ew")
+                       row=5, column=0, columnspan=2, sticky="ew")
 
         passes_group.columnconfigure(0, weight=1)
         passes_group.rowconfigure(1, weight=1)
@@ -155,6 +158,7 @@ class GalleryManagerPage(ttk.Frame):
             show="headings",
             selectmode="browse",
         )
+        self.pass_tree.view_id = "gallery.passes"
         for column, heading, width in (
             ("session", "Session", 155),
             ("pass", "Pass", 80),
@@ -192,7 +196,7 @@ class GalleryManagerPage(ttk.Frame):
             text="Reactivate selected pass",
             command=lambda: self._set_selected_pass_active(True),
         ).grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=4)
-        ttk.Button(actions, text="gallery.delete_fragment", command=self._delete_fragment).grid(
+        ttk.Button(actions, text="gallery.delete_fragment", style="Danger.TButton", command=self._delete_fragment).grid(
             row=2, column=0, columnspan=2, sticky="ew")
 
     def _text(self, zh: str, en: str) -> str:
@@ -368,6 +372,8 @@ class GalleryManagerPage(ttk.Frame):
         position = ScrollPosition.capture(self.person_tree)
         clip_len = int(self.clip_len_var.get())
         self._summary = self.controller.database_summary(bundle_id, clip_len=clip_len)
+        if "person_browser" in self.__dict__:
+            self.person_browser.before_refresh()
         children = self.person_tree.get_children()
         if children:
             self.person_tree.delete(*children)
@@ -396,6 +402,8 @@ class GalleryManagerPage(ttk.Frame):
             first = self.person_tree.get_children()[0]
             self.person_tree.selection_set(first)
             self.person_tree.focus(first)
+        if "person_browser" in self.__dict__:
+            self.person_browser.after_refresh()
         self._load_passes()
         position.restore(self.person_tree)
 

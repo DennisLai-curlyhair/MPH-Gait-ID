@@ -8,10 +8,12 @@ from typing import Any
 import tkinter as tk
 from tkinter import ttk
 
-from PIL import ImageTk
+from PIL import ImageOps, ImageTk
 
 from mph_gait_id.controller import OperationOutcome
+from mph_gait_id.i18n import I18n
 from .scrollable import ScrollableFrame
+from .usability import SYMBOLS, change_preview_view, icon_button, preview_toolbar
 
 from .preview import (
     PreviewViewOptions,
@@ -24,6 +26,7 @@ from .preview import (
 class PreviewPlayer(ttk.Frame):
     def __init__(self, master: tk.Misc, playback_fps: float = 10.0) -> None:
         super().__init__(master, style="Preview.TFrame")
+        self.i18n = getattr(self.winfo_toplevel(), "_gait_i18n", I18n("en"))
         self.default_fps = max(1.0, float(playback_fps))
         self.frames: tuple[Path, ...] = ()
         self.input_type = "pointcloud"
@@ -48,11 +51,12 @@ class PreviewPlayer(ttk.Frame):
         self.image_label.grid(row=0, column=0, columnspan=5, sticky="nsew")
         self.image_label.bind("<Configure>", self._on_preview_resized)
 
-        self.play_button = ttk.Button(self, text="播放", command=self.toggle_play, width=8)
+        self.play_button = icon_button(self, "play", self.toggle_play, self.i18n)
+        self.play_button._tooltip.text = lambda: self.i18n.tr("tool.pause" if self.playing else "tool.play")
         self.play_button.grid(row=1, column=0, padx=(0, 8), pady=(10, 0))
-        self.previous_button = ttk.Button(self, text="上一格", command=self.previous, width=8)
+        self.previous_button = icon_button(self, "previous", self.previous, self.i18n)
         self.previous_button.grid(row=1, column=1, padx=(0, 8), pady=(10, 0))
-        self.next_button = ttk.Button(self, text="下一格", command=self.next, width=8)
+        self.next_button = icon_button(self, "next", self.next, self.i18n)
         self.next_button.grid(row=1, column=2, padx=(0, 10), pady=(10, 0))
 
         self.position = tk.DoubleVar(value=0)
@@ -80,27 +84,8 @@ class PreviewPlayer(ttk.Frame):
             style="Panel.TLabel",
         )
         self.view_title_label.grid(row=0, column=0, sticky="w", padx=(0, 7))
-        ttk.Button(
-            self.view_controls, text="左轉", width=6, command=lambda: self._rotate(-90)
-        ).grid(row=0, column=1, padx=(0, 5))
-        ttk.Button(
-            self.view_controls, text="右轉", width=6, command=lambda: self._rotate(90)
-        ).grid(row=0, column=2, padx=(0, 5))
-        ttk.Button(
-            self.view_controls,
-            text="水平鏡像",
-            width=9,
-            command=self._flip_horizontal,
-        ).grid(row=0, column=3, padx=(0, 5))
-        ttk.Button(
-            self.view_controls,
-            text="垂直翻轉",
-            width=9,
-            command=self._flip_vertical,
-        ).grid(row=0, column=4, padx=(0, 5))
-        ttk.Button(
-            self.view_controls, text="重設", width=6, command=self._reset_view
-        ).grid(row=0, column=5, padx=(0, 8))
+        preview_toolbar(self.view_controls, self._view_action, self.i18n).grid(
+            row=0, column=1, columnspan=5, sticky="w")
         self.view_state_label = ttk.Label(
             self.view_controls,
             text="",
@@ -109,27 +94,8 @@ class PreviewPlayer(ttk.Frame):
         )
         self.view_state_label.grid(row=0, column=6, sticky="e")
 
-        ttk.Label(self.view_controls, text="畫面位置", style="Panel.TLabel").grid(
-            row=1, column=0, sticky="w", padx=(0, 7), pady=(5, 0)
-        )
-        ttk.Button(
-            self.view_controls, text="左", width=5, command=lambda: self._pan(-24, 0)
-        ).grid(row=1, column=1, padx=(0, 5), pady=(5, 0))
-        ttk.Button(
-            self.view_controls, text="右", width=5, command=lambda: self._pan(24, 0)
-        ).grid(row=1, column=2, padx=(0, 5), pady=(5, 0))
-        ttk.Button(
-            self.view_controls, text="上", width=5, command=lambda: self._pan(0, -24)
-        ).grid(row=1, column=3, padx=(0, 5), pady=(5, 0))
-        ttk.Button(
-            self.view_controls, text="下", width=5, command=lambda: self._pan(0, 24)
-        ).grid(row=1, column=4, padx=(0, 5), pady=(5, 0))
-        ttk.Button(
-            self.view_controls, text="放大", width=6, command=lambda: self._zoom(1.2)
-        ).grid(row=1, column=5, padx=(0, 5), pady=(5, 0))
-        ttk.Button(
-            self.view_controls, text="縮小", width=6, command=lambda: self._zoom(1 / 1.2)
-        ).grid(row=1, column=6, sticky="w", pady=(5, 0))
+        icon_button(self.view_controls, "zoom_out", lambda: self._zoom(1 / 1.2), self.i18n).grid(row=1, column=1)
+        icon_button(self.view_controls, "zoom_in", lambda: self._zoom(1.2), self.i18n).grid(row=1, column=2)
 
         ttk.Checkbutton(
             self.view_controls,
@@ -203,12 +169,12 @@ class PreviewPlayer(ttk.Frame):
             if self.current_index >= len(self.frames) - 1:
                 self.current_index = 0
             self.playing = True
-            self.play_button.configure(text="暫停")
+            self.play_button.configure(text=SYMBOLS["pause"])
             self._schedule_next()
 
     def stop(self) -> None:
         self.playing = False
-        self.play_button.configure(text="播放")
+        self.play_button.configure(text=SYMBOLS["play"])
         if self._after_id is not None:
             self.after_cancel(self._after_id)
             self._after_id = None
@@ -241,8 +207,8 @@ class PreviewPlayer(ttk.Frame):
         )
         if overlay is not None:
             overlay = {**overlay, "position": overlay_position}
-        width = max(320, self.image_label.winfo_width())
-        height = max(240, self.image_label.winfo_height())
+        width = max(1, self.image_label.winfo_width() - 16)
+        height = max(1, self.image_label.winfo_height() - 16)
         view_key = self.view_options.cache_key()
         cache_key = (
             self.current_index,
@@ -261,7 +227,7 @@ class PreviewPlayer(ttk.Frame):
                 overlay=overlay,
                 pointcloud_view=self.view_options,
             )
-            photo = ImageTk.PhotoImage(image)
+            photo = ImageTk.PhotoImage(ImageOps.contain(image, (width, height)))
             self._cache[cache_key] = photo
             while len(self._cache) > 24:
                 self._cache.popitem(last=False)
@@ -337,6 +303,11 @@ class PreviewPlayer(ttk.Frame):
         if self.frames:
             self.show_index(self.current_index)
 
+    def _view_action(self, action):
+        self.view_options = change_preview_view(self.view_options, action)
+        self._view_options_by_input[self.input_type] = self.view_options
+        self._refresh_view()
+
     def _rotate(self, amount: int) -> None:
         self._set_view(rotation=(self.view_options.rotation + amount) % 360)
 
@@ -373,12 +344,11 @@ class PreviewPlayer(ttk.Frame):
             self.show_index(self.current_index)
 
     def _update_view_state_label(self) -> None:
-        horizontal = "鏡像" if self.view_options.flip_horizontal else "原向"
-        vertical = "翻轉" if self.view_options.flip_vertical else "原向"
+        horizontal = self.i18n.tr("ui.mirrored" if self.view_options.flip_horizontal else "ui.original")
+        vertical = self.i18n.tr("ui.flipped" if self.view_options.flip_vertical else "ui.original")
         self.view_state_label.configure(
             text=(
                 f"{self.view_options.rotation % 360}° | H {horizontal} | "
                 f"V {vertical} | {self.view_options.zoom:.2f}x"
             )
         )
-

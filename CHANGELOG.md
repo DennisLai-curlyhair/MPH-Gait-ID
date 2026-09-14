@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### UI
+- Persist presentation-only window/pane/column preferences and add a confirmed
+  layout reset without restoring identities, camera sessions or inference settings.
+- Add ID/name search, natural/numeric sorting and selection counts to Gallery
+  and source lists; remove hidden selections from actionable rows.
+- Group advanced controls without changing their values or runtime locks;
+  readiness links reveal the relevant settings.
+- Unify preview symbols and bilingual tooltips; add display-only orientation/pan
+  to source/live views and fit compact previews without clipping.
+- Improve Gallery header density and destructive-action styling; add phase-three
+  regression tests and bilingual operating/acceptance documentation.
 - Add a Realtime readiness checklist, localized pipeline states, frame-buffer
   progress and guided enrollment phase indicators.
 - Wait for capture readiness and pass-command acknowledgement; lock configuration

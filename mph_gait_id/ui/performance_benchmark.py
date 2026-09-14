@@ -142,6 +142,7 @@ class PerformanceBenchmarkPage(ttk.Frame):
         self.privacy_label.grid(row=1, column=0, sticky="ew", pady=(3, 0))
 
         body = SplitPane(self, orient=tk.VERTICAL, fraction=0.35, minimum=(110, 340))
+        body.view_id = "performance.main"
         body.grid(row=2, column=0, sticky="nsew", padx=8, pady=(0, 8))
         settings = ScrollableFrame(body, width=700, height=230)
         settings.content.columnconfigure(0, weight=1)
@@ -286,6 +287,7 @@ class PerformanceBenchmarkPage(ttk.Frame):
                     widget.grid_configure(row=5, column=col - 4, sticky="ew")
 
         content = SplitPane(body, orient=tk.VERTICAL, fraction=0.42, minimum=(150, 180))
+        content.view_id = "performance.results"
         body.add(content, weight=2)
         live = ttk.LabelFrame(
             content,
